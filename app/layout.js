@@ -17,7 +17,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="id" className="antialiased" suppressHydrationWarning>
-      <body className={`${poppins.className} bg-white dark:bg-[#0b1120] text-slate-900 dark:text-slate-100 transition-colors duration-300`}>
+      <body className={`${poppins.className} bg-white dark:bg-[#0b1120] text-slate-900 dark:text-slate-100 transition-colors duration-300`} suppressHydrationWarning>
         <ThemeProvider>
           {/* Prevent dark mode flash */}
           <script

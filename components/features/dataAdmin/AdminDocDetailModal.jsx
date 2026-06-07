@@ -36,15 +36,29 @@ export default function AdminDocDetailModal({ item, onClose, onEdit, onDelete })
   };
 
   // Admin download: proxy through server to force Content-Disposition: attachment
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!item.fileUrl) return;
-    const proxyUrl = `/api/regulations/download?url=${encodeURIComponent(item.fileUrl)}&name=${encodeURIComponent(fileName || "document.pdf")}`;
-    const a = document.createElement('a');
-    a.href = proxyUrl;
-    a.download = fileName || "document.pdf";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const safeFileName = fileName || "document.pdf";
+    const proxyUrl = `/api/regulations/download?url=${encodeURIComponent(item.fileUrl)}&name=${encodeURIComponent(safeFileName)}`;
+    try {
+      const res = await fetch(proxyUrl);
+      if (!res.ok || !res.headers.get("content-type")?.includes("application/pdf")) {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "Gagal mengunduh dokumen. Silakan coba lagi.");
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = safeFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      alert("Gagal mengunduh dokumen. Silakan coba lagi.");
+    }
   };
 
   const modalContent = (

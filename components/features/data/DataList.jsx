@@ -119,21 +119,37 @@ export default function DataList() {
   };
 
   // Fungsi khusus untuk memaksa unduhan (Tombol Unduh) — via server proxy
-  const handleDownloadFile = (doc) => {
+  const handleDownloadFile = async (doc) => {
     if (!doc?.fileUrl) {
       alert("Link file tidak tersedia.");
       return;
     }
-    
+
     handleIncrementView(doc.id, 'download');
 
-    const proxyUrl = `/api/regulations/download?url=${encodeURIComponent(doc.fileUrl)}&name=${encodeURIComponent(doc.fileName || doc.title || "document.pdf")}`;
-    const link = document.createElement("a");
-    link.href = proxyUrl;
-    link.download = doc.fileName || doc.title || "document.pdf";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const fileName = doc.fileName || doc.title || "document.pdf";
+    const proxyUrl = `/api/regulations/download?url=${encodeURIComponent(doc.fileUrl)}&name=${encodeURIComponent(fileName)}`;
+
+    try {
+      const res = await fetch(proxyUrl);
+      if (!res.ok || !res.headers.get("content-type")?.includes("application/pdf")) {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "Gagal mengunduh dokumen. Silakan coba lagi.");
+        return;
+      }
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      alert("Gagal mengunduh dokumen. Silakan coba lagi.");
+    }
   };
 
   // Helper to generate pagination numbers - Smarter & More Expanded

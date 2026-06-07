@@ -17,11 +17,14 @@ export async function GET(req) {
       return NextResponse.json({ error: "URL file tidak ditemukan" }, { status: 400 });
     }
 
-    // Validasi: hanya izinkan URL dari domain Supabase (cegah SSRF)
+    // Validasi: hanya izinkan URL dari domain storage yang dikenal (cegah SSRF)
     try {
       const parsed = new URL(fileUrl);
       const h = parsed.hostname;
-      if (h !== 'supabase.co' && !h.endsWith('.supabase.co')) {
+      const allowed =
+        h === 'supabase.co' || h.endsWith('.supabase.co') ||
+        h === 'r2.dev' || h.endsWith('.r2.dev');
+      if (!allowed) {
         return NextResponse.json({ error: "URL tidak diizinkan" }, { status: 400 });
       }
     } catch {

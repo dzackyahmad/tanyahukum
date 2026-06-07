@@ -109,15 +109,29 @@ export default function DocumentDetailModal({ isOpen, onClose, document: doc, on
               Baca Sekarang
             </button>
               <button 
-              onClick={() => {
+              onClick={async () => {
                 onIncrementView?.(doc.id, 'download');
-                const proxyUrl = `/api/regulations/download?url=${encodeURIComponent(doc.fileUrl)}&name=${encodeURIComponent(doc.fileName || doc.title || "document.pdf")}`;
-                const link = document.createElement("a");
-                link.href = proxyUrl;
-                link.download = doc.fileName || doc.title || "document.pdf";
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                const fileName = doc.fileName || doc.title || "document.pdf";
+                const proxyUrl = `/api/regulations/download?url=${encodeURIComponent(doc.fileUrl)}&name=${encodeURIComponent(fileName)}`;
+                try {
+                  const res = await fetch(proxyUrl);
+                  if (!res.ok || !res.headers.get("content-type")?.includes("application/pdf")) {
+                    const data = await res.json().catch(() => null);
+                    alert(data?.error || "Gagal mengunduh dokumen. Silakan coba lagi.");
+                    return;
+                  }
+                  const blob = await res.blob();
+                  const blobUrl = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.href = blobUrl;
+                  link.download = fileName;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(blobUrl);
+                } catch {
+                  alert("Gagal mengunduh dokumen. Silakan coba lagi.");
+                }
               }}
               className="px-6 py-4 border-2 border-gray-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-500 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-2xl transition-all active:scale-[0.98]"
             >
