@@ -7,6 +7,7 @@ export async function GET() {
     const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
     const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
     const prevWeekStart = new Date(now); prevWeekStart.setDate(prevWeekStart.getDate() - 14);
+    const yearAgo = new Date(now); yearAgo.setFullYear(yearAgo.getFullYear() - 1);
 
     // === PARALLEL AGGREGATION QUERIES ===
     const [
@@ -45,8 +46,8 @@ export async function GET() {
       prisma.regulation.findMany({ orderBy: { createdAt: 'desc' }, take: 5, select: { id: true, title: true, createdAt: true, category: true, fileSize: true, fileUrl: true, description: true } }),
       // Trending issues
       prisma.trendingIssue.findMany({ orderBy: { publishDate: 'desc' }, take: 5, select: { id: true, title: true, description: true, publishDate: true, location: true, newsLink: true, isActive: true } }),
-      // Search trends (last 30 days)
-      prisma.searchLog.groupBy({ by: ['createdAt'], _count: { id: true }, orderBy: { createdAt: 'asc' } }),
+      // Search trends (last 365 days)
+      prisma.searchLog.findMany({ where: { createdAt: { gte: yearAgo } }, select: { createdAt: true }, orderBy: { createdAt: 'asc' } }),
       // Category distribution
       prisma.regulation.groupBy({ by: ['category'], _count: { id: true }, where: { category: { not: null } } }),
       // Active users today (users who sent messages today)
@@ -57,11 +58,11 @@ export async function GET() {
     const trendMap = {};
     searchTrendsRaw.forEach((log) => {
       const dateKey = log.createdAt.toISOString().split('T')[0];
-      trendMap[dateKey] = (trendMap[dateKey] || 0) + log._count.id;
+      trendMap[dateKey] = (trendMap[dateKey] || 0) + 1;
     });
-    const searchTrends = Object.keys(trendMap).slice(-30).map(date => ({
-      date, searches: trendMap[date]
-    }));
+    const searchTrends = Object.keys(trendMap)
+      .sort()
+      .map(date => ({ date, searches: trendMap[date] }));
 
     // === COMPUTE GROWTH PERCENTAGES ===
     const calcGrowth = (current, prev) => {

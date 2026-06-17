@@ -21,16 +21,18 @@ export default function ChartPlaceholder({ trends = [] }) {
     { id: "1y", label: "1 Tahun", days: 365 },
   ];
 
-  // Filter trends based on selected range (Frontend only logic as requested)
+  // Filter trends based on selected range by actual date
   const filteredTrends = useMemo(() => {
     if (!trends || trends.length === 0) return [];
-    
+
     const rangeObj = ranges.find(r => r.id === timeRange);
     const daysToKeep = rangeObj ? rangeObj.days : 30;
-    
-    // Assume trends is sorted by date ascending. If not, we should sort.
-    // For now, we'll just take the last N items.
-    return trends.slice(-daysToKeep);
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - daysToKeep);
+    cutoff.setHours(0, 0, 0, 0);
+
+    return trends.filter(d => new Date(d.date) >= cutoff);
   }, [trends, timeRange]);
 
   const chartData = useMemo(() => {
