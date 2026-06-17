@@ -19,6 +19,9 @@ export async function GET() {
             return NextResponse.json(cache.data, { status: 200, headers: { "Cache-Control": "no-store" } });
         }
 
+        // Reset cache sebelum fetch ulang
+        cache.data = null;
+
         // --- KODE INI BUAT BIKIN BATAS WAKTU HARI INI ---
         // 1. Dapatkan tanggal hari ini (YYYY-MM-DD) versi waktu Indonesia (+7 jam)
         const now = new Date();
@@ -81,38 +84,27 @@ export async function GET() {
             })
         ]);
 
-        // 2. Tarik & Rekap Data Tren Pencarian per Hari
-        // Menggunakan fitur groupBy milik Prisma
-        const searchTrendsRaw = await prisma.searchLog.groupBy({
-            by: ['createdAt'], // Kelompokkan berdasarkan waktu
-            _count: {
-                id: true, // Hitung jumlah ID per waktu
-            },
-            orderBy: {
-                createdAt: 'asc', // Urutkan dari yang terlama ke terbaru (untuk grafik)
-            },
-            take: 30 // Ambil maksimal 30 hari terakhir biar grafik nggak kepanjangan
+        // 2. Tarik & Rekap Data Tren Pencarian per Hari (365 hari terakhir)
+        const yearAgo = new Date(now);
+        yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+
+        const searchTrendsRaw = await prisma.searchLog.findMany({
+            where: { createdAt: { gte: yearAgo } },
+            select: { createdAt: true },
+            orderBy: { createdAt: 'asc' },
         });
 
-        // Karena Prisma mengelompokkan berdasarkan waktu persis (jam/menit/detik), 
-        // kita harus merapikannya dengan JavaScript agar murni dikelompokkan per "Tanggal" (YYYY-MM-DD).
+        // Agregasi per tanggal (YYYY-MM-DD)
         const trendMap = {};
         searchTrendsRaw.forEach((log) => {
-            // Ambil format YYYY-MM-DD
             const dateKey = log.createdAt.toISOString().split('T')[0];
-
-            if (trendMap[dateKey]) {
-                trendMap[dateKey] += log._count.id;
-            } else {
-                trendMap[dateKey] = log._count.id;
-            }
+            trendMap[dateKey] = (trendMap[dateKey] || 0) + 1;
         });
 
-        // Ubah Object map tadi menjadi Array agar disukai oleh grafik Frontend bos
-        const formattedSearchTrends = Object.keys(trendMap).map((date) => ({
-            date: date,
-            searches: trendMap[date]
-        }));
+        // Urutkan keys by date lalu ubah ke array
+        const formattedSearchTrends = Object.keys(trendMap)
+            .sort()
+            .map((date) => ({ date, searches: trendMap[date] }));
 
         // 3. Format Data untuk Frontend
         const formattedPopularDocs = popularDocsData.map(doc => ({
