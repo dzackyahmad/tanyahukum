@@ -25,12 +25,14 @@ const MENU = [
     icon: "/icons/dashboardStatistik.svg",
     path: "/dashboard",
     restricted: true,
+    tour: "nav-dashboard",
   },
   {
     label: "Pusat Data Hukum",
     icon: "/icons/pusatDataSidebar.svg",
     path: "/pusat-data",
     restricted: true,
+    tour: "nav-pusat-data",
   },
 ];
 
@@ -198,6 +200,7 @@ export default function Sidebar({ isOpen, setIsOpen, onOpenProfile }) {
                 icon={item.icon}
                 label={item.label}
                 isOpen={isOpen}
+                tour={item.tour}
                 onClick={() => handleMenuClick(item)}
                 disabled={item.restricted && !user}
               />
@@ -245,6 +248,7 @@ export default function Sidebar({ isOpen, setIsOpen, onOpenProfile }) {
         {/* PROFILE */}
         {user && (
           <div
+            data-tour="profile"
             onClick={onOpenProfile}
             className={`flex items-center ${
               isOpen ? "gap-3 px-2" : "justify-center"
@@ -294,9 +298,9 @@ export default function Sidebar({ isOpen, setIsOpen, onOpenProfile }) {
 }
 
 /* ===== MENU ITEM ===== */
-function MenuItem({ icon, label, isOpen, onClick, disabled }) {
+function MenuItem({ icon, label, isOpen, onClick, disabled, tour }) {
   return (
-    <div className="relative group">
+    <div data-tour={tour} className="relative group">
       <button
         onClick={onClick}
         disabled={disabled}

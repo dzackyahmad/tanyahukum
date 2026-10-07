@@ -140,9 +140,10 @@ describe('GET /api/regulations', () => {
       regulation: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
       searchLog: { create: jest.fn().mockResolvedValue({}) },
     };
-    const { GET } = await loadRouteWithMocks(baseRoute, { prismaMock });
+    // userId kini diambil dari sesi login, bukan dari query param
+    const { GET } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: { userId: 'u1' } });
 
-    const req = makeMockRequest({ url: 'http://localhost/api/regulations?search=tenaga+kerja&userId=u1' });
+    const req = makeMockRequest({ url: 'http://localhost/api/regulations?search=tenaga+kerja&userId=spoofed' });
     await GET(req);
 
     // Wait for async fire-and-forget log
@@ -150,6 +151,20 @@ describe('GET /api/regulations', () => {
     expect(prismaMock.searchLog.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ query: 'tenaga kerja', userId: 'u1' }) })
     );
+  });
+
+  test('TC-REG-10: [SECURITY] sortBy tidak dikenal diabaikan (fallback ke title)', async () => {
+    const prismaMock = {
+      regulation: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      searchLog: { create: jest.fn() },
+    };
+    const { GET } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: null });
+
+    const req = makeMockRequest({ url: 'http://localhost/api/regulations?sortBy=content&order=DROP' });
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const findManyCall = prismaMock.regulation.findMany.mock.calls[0]?.[0];
+    expect(findManyCall.orderBy).toEqual({ title: 'asc' });
   });
 
   test('TC-REG-09: does NOT log search when search param is empty', async () => {

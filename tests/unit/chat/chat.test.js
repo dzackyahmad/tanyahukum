@@ -119,7 +119,7 @@ describe('POST /api/chat', () => {
     const prismaMock = {
       user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', tier: 'PRO', promptLimit: 0, personalContext: null }) },
       chatHistory: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue({}) },
-      chat: { create: jest.fn(), findUnique: jest.fn().mockResolvedValue({ id: 'existing-chat-id' }), update: jest.fn().mockResolvedValue({}) },
+      chat: { create: jest.fn(), findUnique: jest.fn().mockResolvedValue({ id: 'existing-chat-id', userId: 'u1' }), update: jest.fn().mockResolvedValue({}) },
     };
     const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
 
@@ -127,6 +127,72 @@ describe('POST /api/chat', () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(prismaMock.chat.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/chat — ownership chatId', () => {
+  test('TC-CHAT-20: [SECURITY] POST ke chatId milik user lain ditolak 404 sebelum AI dipanggil', async () => {
+    const invoke = jest.fn();
+    mockExternalServices();
+    jest.doMock('@langchain/google-genai', () => ({ ChatGoogleGenerativeAI: class { invoke(...a) { return invoke(...a); } } }));
+    const prismaMock = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', tier: 'PRO', promptLimit: 0, personalContext: null }) },
+      chatHistory: { count: jest.fn().mockResolvedValue(0), create: jest.fn() },
+      chat: { create: jest.fn(), findUnique: jest.fn().mockResolvedValue({ id: 'victim-chat', userId: 'victim-id' }), update: jest.fn() },
+    };
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+
+    const req = makeMockRequest({ method: 'POST', jsonBody: { message: 'Sisipan', chatId: 'victim-chat' } });
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(prismaMock.chatHistory.create).not.toHaveBeenCalled();
+  });
+
+  test('TC-CHAT-21: pesan melebihi 5000 karakter ditolak 400', async () => {
+    const prismaMock = { user: { findUnique: jest.fn() }, chatHistory: { count: jest.fn() }, chat: { create: jest.fn() } };
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+    const req = makeMockRequest({ method: 'POST', jsonBody: { message: 'A'.repeat(5001) } });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/chat — urutan riwayat', () => {
+  test('TC-CHAT-23: jawaban AI selalu tersimpan setelah pertanyaan user (createdAt lebih besar)', async () => {
+    mockExternalServices();
+    const prismaMock = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', tier: 'PRO', promptLimit: 0, personalContext: null }) },
+      chatHistory: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue({}) },
+      chat: { create: jest.fn().mockResolvedValue({ id: 'c1' }), update: jest.fn().mockResolvedValue({}) },
+    };
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+    const res = await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tanya urutan' } }));
+    expect(res.status).toBe(200);
+
+    const byRole = Object.fromEntries(prismaMock.chatHistory.create.mock.calls.map(([a]) => [a.data.role, a.data.createdAt]));
+    expect(byRole.AI.getTime()).toBeGreaterThan(byRole.USER.getTime());
+  });
+
+  test('TC-CHAT-24: riwayat diurutkan createdAt lalu role (USER sebelum AI jika timestamp kembar)', async () => {
+    const prismaMock = { chatHistory: { findMany: jest.fn().mockResolvedValue([]) }, chat: { findMany: jest.fn() } };
+    const { GET } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+    await GET(makeMockRequest({ url: 'http://localhost/api/chat?userId=u1&chatId=c1' }));
+    expect(prismaMock.chatHistory.findMany.mock.calls[0][0].orderBy).toEqual([{ createdAt: 'asc' }, { role: 'asc' }]);
+  });
+});
+
+describe('GET /api/chat — ownership chatId', () => {
+  test('TC-CHAT-22: [SECURITY] GET pesan selalu di-scope ke userId sesi (tidak bisa baca chat orang lain)', async () => {
+    const prismaMock = { chatHistory: { findMany: jest.fn().mockResolvedValue([]) }, chat: { findMany: jest.fn() } };
+    const { GET } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+    const req = makeMockRequest({ url: 'http://localhost/api/chat?userId=u1&chatId=victim-chat' });
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    expect(prismaMock.chatHistory.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { chatId: 'victim-chat', userId: 'u1' } })
+    );
   });
 });
 

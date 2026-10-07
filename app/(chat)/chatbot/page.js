@@ -8,6 +8,7 @@ import ChatArea from "@/components/features/chat/ChatArea";
 // SUBSCRIPTION
 import AboutModal from "@/components/features/about/AboutModal";
 import AppShell from "@/components/layout/AppShell";
+import OnboardingTour from "@/components/features/onboarding/OnboardingTour";
 
 import { getProfile } from "@/src/lib/profile";
 
@@ -74,6 +75,8 @@ export default function ChatbotPage() {
     >
       <AboutModal onOpenAuth={(mode) => window.dispatchEvent(new CustomEvent("open-auth", { detail: { mode: mode || "login" } }))} />
       
+      <OnboardingTour user={user} />
+
       <ChatArea
         user={user}
         onOpenAuth={(mode) => window.dispatchEvent(new CustomEvent("open-auth", { detail: { mode: mode || "login" } }))}

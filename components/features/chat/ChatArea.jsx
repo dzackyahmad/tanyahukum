@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Header from "@/components/layout/Header";
 import LegalResponse from "./LegalResponse";
+import AIDisclaimer from "./AIDisclaimer";
 
 import {
   sendMessage,
@@ -32,17 +33,58 @@ const EMPTY_PROMPTS = [
   "Mau tahu hak dan kewajibanmu secara hukum? Mulai dari sini.",
 ];
 
+// Rekomendasi pertanyaan — tiap item sudah diuji ke database (Pinecone): dokumen teratas
+// berisi pasal yang langsung menjawab. Jangan menambah pertanyaan tanpa menguji dulu.
+// Setiap obrolan baru menampilkan SUGGESTION_COUNT pertanyaan acak dari daftar ini.
+const SUGGESTED_QUESTIONS = [
+  { label: "Kontrak kerja (PKWT)", question: "Berapa lama maksimal perjanjian kerja waktu tertentu (PKWT)?" },
+  { label: "Kerja lembur", question: "Berapa batas maksimal waktu kerja lembur?" },
+  { label: "Cuti tahunan", question: "Apa hak istirahat dan cuti tahunan pekerja?" },
+  { label: "Pekerja disabilitas", question: "Apa saja kewajiban pemberi kerja terhadap penyandang disabilitas?" },
+  { label: "Alasan PHK", question: "Apa saja alasan perusahaan boleh melakukan PHK?" },
+  { label: "Lapor lowongan kerja", question: "Apakah perusahaan wajib melaporkan lowongan pekerjaan?" },
+  { label: "Upah minimum", question: "Bagaimana ketentuan upah minimum bagi pekerja?" },
+  { label: "Pekerja anak", question: "Apa larangan mempekerjakan anak di bawah umur?" },
+  { label: "Kawasan tanpa rokok", question: "Apa saja tempat yang termasuk kawasan tanpa rokok?" },
+  { label: "Bangunan gedung", question: "Apa saja kewajiban pemilik bangunan gedung?" },
+  { label: "Perselisihan kerja", question: "Bagaimana penyelesaian perselisihan hubungan industrial?" },
+  { label: "Jam kerja", question: "Berapa jam waktu kerja maksimal dalam seminggu?" },
+  { label: "Perjanjian kerja bersama", question: "Apa itu perjanjian kerja bersama (PKB)?" },
+  { label: "Serikat pekerja", question: "Apa hak serikat pekerja di perusahaan?" },
+  { label: "Pemagangan", question: "Apa syarat program pemagangan bagi peserta magang?" },
+  { label: "Penanggulangan bencana", question: "Bagaimana penyelenggaraan penanggulangan bencana di daerah?" },
+  { label: "Disabilitas & layanan publik", question: "Apa saja hak penyandang disabilitas dalam pelayanan publik?" },
+  { label: "Izin bangunan (PBG)", question: "Apa itu Persetujuan Bangunan Gedung (PBG)?" },
+  { label: "Penempatan tenaga kerja", question: "Bagaimana mekanisme penempatan tenaga kerja?" },
+  { label: "Pekerja menyusui", question: "Apa kewajiban pengusaha terhadap pekerja perempuan yang menyusui?" },
+  { label: "Mogok kerja", question: "Bagaimana tata cara mogok kerja yang sah?" },
+];
+
 const getRandomItem = (arr) => {
   return arr[Math.floor(Math.random() * arr.length)];
 };
+
+// Ambil n item acak tanpa duplikat (Fisher–Yates)
+const getRandomItems = (arr, n) => {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, n);
+};
+
+const SUGGESTION_COUNT = 4;
 
 export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState(null);
 
   const [emptyTitle, setEmptyTitle] = useState("");
   const [emptyText, setEmptyText] = useState("");
+  const [suggestions, setSuggestions] = useState([]); // diacak tiap obrolan baru
 
   const sendingRef = useRef(false);
 
@@ -68,6 +110,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
         setMessages([]);
         setEmptyTitle(getRandomItem(EMPTY_TITLES));
         setEmptyText(getRandomItem(EMPTY_PROMPTS));
+        setSuggestions(getRandomItems(SUGGESTED_QUESTIONS, SUGGESTION_COUNT));
       }
     };
 
@@ -81,8 +124,10 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
   // ==============================
   // SEND MESSAGE
   // ==============================
-  const handleSend = async () => {
-    if (!message.trim()) return;
+  // overrideText: dipakai tombol rekomendasi pertanyaan (kirim langsung tanpa mengetik)
+  const handleSend = async (overrideText) => {
+    const text = typeof overrideText === "string" ? overrideText : message;
+    if (!text.trim()) return;
 
     if (!user) {
       onOpenAuth("login");
@@ -90,14 +135,14 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
     }
 
     if (user?.tier !== "PRO" && user?.promptLimit <= 0) {
-      onOpenSubscription();
+      if (onOpenSubscription) onOpenSubscription();
+      else window.location.href = "/subscription";
       return;
     }
 
     if (loading || sendingRef.current) return;
     sendingRef.current = true;
 
-    const text = message;
     const currentChatId = getCurrentConversationId();
 
     const userMessage = {
@@ -188,7 +233,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
             </p>
 
             {/* INPUT TENGAH */}
-            <div className="w-full max-w-2xl flex border-2 border-blue-100 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm animate-fade-down delay-150 focus-ring premium-glow transition-colors">
+            <div data-tour="chat-input" className="w-full max-w-2xl flex border-2 border-blue-100 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm animate-fade-down delay-150 focus-ring premium-glow transition-colors">
               
               <input
                 type="text"
@@ -220,52 +265,64 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
               </button>
 
             </div>
+
+            {/* REKOMENDASI PERTANYAAN */}
+            <div className="w-full max-w-2xl mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 animate-fade-down delay-150">
+              {suggestions.map((s) => (
+                <button
+                  key={s.question}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => handleSend(s.question)}
+                  className="group text-left px-4 py-3 rounded-2xl border border-gray-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/50 hover:border-blue-300 dark:hover:border-blue-500/50 hover:bg-blue-50/60 dark:hover:bg-slate-800 transition-all active:scale-[0.99] disabled:opacity-50"
+                >
+                  <span className="block text-xs font-semibold text-blue-600 dark:text-blue-400">{s.label}</span>
+                  <span className="block mt-0.5 text-sm text-gray-600 dark:text-slate-300 group-hover:text-gray-900 dark:group-hover:text-white leading-snug transition-colors">
+                    {s.question}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <AIDisclaimer className="mt-5 max-w-2xl animate-fade-down delay-150" />
           </div>
 
         ) : (
           <>
             {/* CHAT LIST */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0 scroll-smooth">
-              <div className="flex flex-col gap-4">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-8 min-h-0 scroll-smooth">
+              <div className="max-w-5xl mx-auto flex flex-col gap-7">
 
-                {messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex flex-col ${
-                      msg.role === "user" ? "items-end" : "items-start"
-                    } group mb-6 transition-all duration-300`}
-                  >
-                    <div
-                      className={`relative max-w-[95%] sm:max-w-[85%] px-7 py-6 rounded-[2rem] text-[15.5px] leading-[1.75] tracking-tight ${
-                        msg.role === "user"
-                          ? "bg-blue-600 text-white shadow-xl shadow-blue-500/10 rounded-tr-none border border-blue-400/20"
-                          : "bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 shadow-md shadow-gray-200/50 dark:shadow-none text-gray-800 dark:text-slate-200 rounded-tl-none"
-                      }`}
-                    >
-                      {msg.role === "assistant" ? (
-                        <LegalResponse content={msg.content} />
-                      ) : (
-                        <div className="whitespace-pre-wrap font-medium">
-                          {msg.content}
+                {messages.map((msg, i) =>
+                  msg.role === "user" ? (
+                    <div key={i} className="flex justify-end">
+                      <div className="max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl rounded-br-md bg-blue-600 text-white text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                        {msg.content}
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={i} className="flex items-start gap-3 group">
+                      <BotAvatar />
+
+                      <div className="flex-1 min-w-0 sm:max-w-[92%]">
+                        <div className="px-5 py-4 sm:px-6 sm:py-5 rounded-2xl rounded-tl-md bg-white dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700/60">
+                          <LegalResponse content={msg.content} />
                         </div>
-                      )}
 
-                      {/* ACTIONS (TOP-RIGHT) */}
-                      {msg.role === "assistant" && (
-                        <div className="absolute -top-3 -right-3 flex gap-1 opacity-40 group-hover:opacity-100 transition-all duration-300 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 p-1 rounded-xl shadow-md z-10 scale-90 group-hover:scale-100">
+                        {/* ACTIONS (di bawah jawaban) */}
+                        <div className="mt-1.5 flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
                           <ActionButton
                             icon="/icons/copy.svg"
+                            label={copiedIndex === i ? "Tersalin" : "Salin"}
                             onClick={() => {
                               navigator.clipboard.writeText(msg.content);
-                              const btn = document.getElementById(`copy-${i}`);
-                              if (btn) btn.innerText = "✓";
-                              setTimeout(() => { if (btn) btn.innerText = ""; }, 2000);
+                              setCopiedIndex(i);
+                              setTimeout(() => setCopiedIndex((cur) => (cur === i ? null : cur)), 2000);
                             }}
-                            tooltip="Copy"
-                            id={`copy-${i}`}
                           />
                           <ActionButton
                             icon="/icons/regenerate.svg"
+                            label="Ulangi"
                             onClick={() => {
                               const lastUserIdx = messages.slice(0, i).findLastIndex(m => m.role === "user");
                               if (lastUserIdx !== -1) {
@@ -277,17 +334,17 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
                                 }, 0);
                               }
                             }}
-                            tooltip="Regenerate"
                           />
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                )}
 
                 {loading && (
-                  <div className="flex flex-col items-start mb-4">
-                    <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 shadow-sm px-5 py-4 rounded-2xl rounded-tl-none flex gap-1.5 items-center">
+                  <div className="flex items-start gap-3">
+                    <BotAvatar />
+                    <div className="bg-white dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700/60 px-5 py-4 rounded-2xl rounded-tl-md flex gap-1.5 items-center">
                       <div className="w-1.5 h-1.5 bg-blue-400 dark:bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                       <div className="w-1.5 h-1.5 bg-blue-500 dark:bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                       <div className="w-1.5 h-1.5 bg-blue-600 dark:bg-blue-300 rounded-full animate-bounce"></div>
@@ -299,8 +356,8 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
               </div>
             </div>
 
-            <div className="p-6 border-t border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 transition-colors">
-              <div className="w-full flex border border-blue-200 dark:border-slate-700 rounded-[1.5rem] overflow-hidden bg-white dark:bg-slate-800 shadow-xl shadow-blue-500/5 focus-ring transition-all">
+            <div className="px-4 sm:px-6 pt-4 pb-3 border-t border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 transition-colors">
+              <div data-tour="chat-input" className="max-w-5xl mx-auto w-full flex border border-blue-200 dark:border-slate-700 rounded-[1.5rem] overflow-hidden bg-white dark:bg-slate-800 shadow-xl shadow-blue-500/5 focus-ring transition-all">
                 
                 <input
                   type="text"
@@ -332,6 +389,8 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
                 </button>
 
               </div>
+
+              <AIDisclaimer className="mt-3" />
             </div>
           </>
         )}
@@ -341,15 +400,23 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
   );
 }
 
-function ActionButton({ icon, onClick, tooltip, id }) {
+function BotAvatar() {
+  return (
+    <div className="shrink-0 w-8 h-8 mt-0.5 rounded-xl bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 flex items-center justify-center">
+      <img src="/icons/logo.svg" alt="TanyaHukum" className="w-5 h-5" />
+    </div>
+  );
+}
+
+function ActionButton({ icon, label, onClick }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1 min-w-[28px] justify-center"
-      title={tooltip}
+      className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-700 dark:hover:text-slate-200 transition-colors"
     >
-      <img src={icon} className="w-3.5 h-3.5 opacity-60 dark:invert" />
-      <span id={id} className="text-[10px] font-bold text-blue-600 dark:text-blue-400"></span>
+      <img src={icon} alt="" className="w-3.5 h-3.5 opacity-60 dark:invert" />
+      {label}
     </button>
   );
 }

@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import crypto from "crypto";
 
 // Health check untuk mengetes apakah webhook bisa dijangkau (lewat ngrok/domain)
+// Catatan keamanan: jangan pernah menampilkan potongan server key di sini.
 export async function GET() {
   const serverKey = (process.env.MIDTRANS_SERVER_KEY || "").trim();
   
@@ -11,16 +12,22 @@ export async function GET() {
     time: new Date().toISOString(),
     env_check: {
       has_server_key: serverKey.length > 0,
-      key_prefix: serverKey.substring(0, 7), // "Mid-ser" atau "SB-Mid-"
       is_production: process.env.NODE_ENV === "production"
     },
     webhook_url_hint: "Pastikan URL ini terdaftar di Dashboard Midtrans -> Settings -> Configuration -> Payment Notification URL"
   });
 }
 
+// Perbandingan constant-time untuk mencegah timing attack pada signature
+function safeEqualHex(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 export async function POST(req) {
-  console.log("[MIDTRANS-WEBHOOK] Webhook received!");
-  
   try {
     const body = await req.json();
     const { 
@@ -35,33 +42,31 @@ export async function POST(req) {
 
     // 1. Verifikasi Signature Key
     const serverKey = (process.env.MIDTRANS_SERVER_KEY || "").trim();
-    if (!serverKey) {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // Fail-closed: tanpa server key, signature bisa dihitung siapa saja
+    if (!serverKey && isProduction) {
       console.error("[MIDTRANS-WEBHOOK] ERROR: MIDTRANS_SERVER_KEY is empty or missing!");
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
-    // Pastikan gross_amount adalah string yang tepat (Midtrans biasanya kirim "49900.00")
-    // Kita gunakan template literal untuk memastikan string concatenation yang bersih
-    const combinedString = `${order_id}${status_code}${gross_amount}${serverKey}`;
-    const localSignature = crypto.createHash("sha512").update(combinedString).digest("hex");
+    // Signature Midtrans: SHA512(order_id + status_code + gross_amount + serverKey)
+    // JANGAN log string gabungan ini — isinya mengandung server key.
+    const localSignature = crypto
+      .createHash("sha512")
+      .update(`${order_id}${status_code}${gross_amount}${serverKey}`)
+      .digest("hex");
 
-    console.log("[MIDTRANS-WEBHOOK] Comparing Signatures:");
-    console.log(" - Order ID:", order_id);
-    console.log(" - Combined String:", combinedString);
-    console.log(" - Local Signature:", localSignature);
-    console.log(" - Midtrans Signature:", signature_key);
-
-    // Sandbox Bypass: Jika di sandbox, kita tetap proses meskipun signature mismatch
-    // agar flow tidak terputus karena masalah pembulatan gross_amount atau string concatenation.
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[MIDTRANS-WEBHOOK] SANDBOX BYPASS: Processing payment without signature check.");
-    } else {
-      if (localSignature !== signature_key) {
-        console.error(`[MIDTRANS-WEBHOOK] Signature mismatch for Order: ${order_id}`);
-        return NextResponse.json({ error: "Invalid Signature" }, { status: 403 });
+    // Sandbox Bypass (hanya non-production, perilaku lama dipertahankan untuk dev lokal/ngrok).
+    // Di Vercel (production & preview) NODE_ENV selalu "production" sehingga signature wajib valid.
+    if (!isProduction) {
+      if (!safeEqualHex(localSignature, signature_key)) {
+        console.warn("[MIDTRANS-WEBHOOK] SANDBOX BYPASS: signature tidak cocok, tetap diproses (non-production).");
       }
+    } else if (!safeEqualHex(localSignature, signature_key)) {
+      console.error(`[MIDTRANS-WEBHOOK] Signature mismatch for Order: ${order_id}`);
+      return NextResponse.json({ error: "Invalid Signature" }, { status: 403 });
     }
-
-    console.log("[MIDTRANS-WEBHOOK] Continuing to process payment...");
 
     let finalStatus = "PENDING";
 
@@ -77,47 +82,45 @@ export async function POST(req) {
       finalStatus = "FAILED";
     }
 
-    console.log(`[MIDTRANS-WEBHOOK] Final mapped status: ${finalStatus}`);
-
     // 3. Update Database
     const transaction = await prisma.transaction.findUnique({
       where: { orderId: order_id },
     });
 
     if (!transaction) {
-      console.error(`[MIDTRANS-WEBHOOK] FAILED: Transaction ${order_id} not found in DB!`);
+      console.error(`[MIDTRANS-WEBHOOK] Transaction ${order_id} not found in DB`);
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
 
-    console.log(`[MIDTRANS-WEBHOOK] Found transaction in DB. Current status: ${transaction.status}, User ID: ${transaction.userId}`);
-
     if (transaction.status === "SUCCESS") {
-      console.log(`[MIDTRANS-WEBHOOK] Order ${order_id} already marked as SUCCESS. Skipping.`);
       return NextResponse.json({ message: "Already processed" }, { status: 200 });
     }
 
+    // Pastikan nominal yang dibayar sama dengan nominal transaksi di DB
+    if (
+      finalStatus === "SUCCESS" &&
+      transaction.amount != null &&
+      Number.parseFloat(gross_amount) !== Number(transaction.amount)
+    ) {
+      console.error(`[MIDTRANS-WEBHOOK] Amount mismatch for Order: ${order_id}`);
+      return NextResponse.json({ error: "Amount mismatch" }, { status: 400 });
+    }
+
     if (finalStatus === "SUCCESS") {
-      console.log(`[MIDTRANS-WEBHOOK] Upgrading user ${transaction.userId} to PRO...`);
-      
-      try {
-        await prisma.$transaction([
-          prisma.transaction.update({
-            where: { orderId: order_id },
-            data: { status: "SUCCESS" },
-          }),
-          prisma.user.update({
-            where: { id: transaction.userId },
-            data: {
-              tier: "PRO",
-              promptLimit: 0,
-            },
-          }),
-        ]);
-        console.log(`[MIDTRANS-WEBHOOK] DATABASE UPDATED SUCCESSFULLY! User is now PRO.`);
-      } catch (dbError) {
-        console.error("[MIDTRANS-WEBHOOK] DATABASE UPDATE FAILED:", dbError);
-        throw dbError; // Lempar ke catch blok utama
-      }
+      await prisma.$transaction([
+        prisma.transaction.update({
+          where: { orderId: order_id },
+          data: { status: "SUCCESS" },
+        }),
+        prisma.user.update({
+          where: { id: transaction.userId },
+          data: {
+            tier: "PRO",
+            promptLimit: 0,
+          },
+        }),
+      ]);
+      console.log(`[MIDTRANS-WEBHOOK] Order ${order_id} SUCCESS, user upgraded to PRO.`);
     } else {
       await prisma.transaction.update({
         where: { orderId: order_id },
@@ -129,7 +132,7 @@ export async function POST(req) {
     return NextResponse.json({ message: "OK" }, { status: 200 });
 
   } catch (error) {
-    console.error("[MIDTRANS-WEBHOOK] FATAL ERROR:", error);
+    console.error("[MIDTRANS-WEBHOOK] FATAL ERROR:", error?.message);
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

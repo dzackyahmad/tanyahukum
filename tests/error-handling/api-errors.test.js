@@ -7,6 +7,9 @@ import { loadRouteWithMocks } from '@/tests/utils/loadRouteWithMocks';
 //          missing env vars, vector DB failure, concurrent race conditions
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Sesi login default untuk endpoint yang wajib autentikasi
+const SESSION_U1 = { userId: 'u1', email: 'u1@test.com', role: 'USER' };
+
 jest.mock('@/lib/email', () => ({
   sendResetPasswordEmail: jest.fn().mockResolvedValue(undefined),
 }));
@@ -122,7 +125,7 @@ describe('Error Handling: AI Service Failures', () => {
       chatHistory: { count: jest.fn().mockResolvedValue(0), create: jest.fn() },
       chat: { create: jest.fn().mockResolvedValue({ id: 'c1' }), update: jest.fn() },
     };
-    const { POST } = await loadRouteWithMocks('@/app/api/chat/route.js', { prismaMock });
+    const { POST } = await loadRouteWithMocks('@/app/api/chat/route.js', { prismaMock, authSession: SESSION_U1 });
     const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'u1', message: 'Test error' } });
     const res = await POST(req);
     expect(res.status).toBe(500);
@@ -160,7 +163,7 @@ describe('Error Handling: AI Service Failures', () => {
       chatHistory: { count: jest.fn().mockResolvedValue(0), create: jest.fn() },
       chat: { create: jest.fn().mockResolvedValue({ id: 'c1' }), update: jest.fn() },
     };
-    const { POST } = await loadRouteWithMocks('@/app/api/chat/route.js', { prismaMock });
+    const { POST } = await loadRouteWithMocks('@/app/api/chat/route.js', { prismaMock, authSession: SESSION_U1 });
     const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'u1', message: 'Tes kuota AI' } });
     const res = await POST(req);
     expect(res.status).toBe(429);
@@ -191,7 +194,7 @@ describe('Error Handling: AI Service Failures', () => {
         update: jest.fn(),
       },
     };
-    const { POST } = await loadRouteWithMocks('@/app/api/chat/route.js', { prismaMock });
+    const { POST } = await loadRouteWithMocks('@/app/api/chat/route.js', { prismaMock, authSession: SESSION_U1 });
     const req = makeMockRequest({
       method: 'POST',
       jsonBody: { userId: 'u1', message: 'Test missing chat', chatId: 'non-existent-chat' },
@@ -231,7 +234,7 @@ describe('Error Handling: Malformed Requests', () => {
 
   test('TC-ERR-10: chat POST handles empty body (no JSON fields)', async () => {
     const prismaMock = { user: { findUnique: jest.fn() }, chatHistory: { count: jest.fn() }, chat: { create: jest.fn() } };
-    const { POST } = await loadRouteWithMocks('@/app/api/chat/route.js', { prismaMock });
+    const { POST } = await loadRouteWithMocks('@/app/api/chat/route.js', { prismaMock, authSession: SESSION_U1 });
 
     const req = makeMockRequest({ method: 'POST', jsonBody: {} });
     const res = await POST(req);
@@ -256,16 +259,29 @@ describe('Error Handling: Malformed Requests', () => {
 // ── EXTERNAL SERVICE UNAVAILABLE ─────────────────────────────────────────────
 describe('Error Handling: External Service Unavailable', () => {
   test('TC-ERR-12: payment checkout returns 500 when Midtrans is unreachable', async () => {
-    const Midtrans = require('midtrans-client').default;
-    Midtrans.Snap.mockImplementationOnce(() => ({
-      createTransaction: jest.fn().mockRejectedValue(new Error('ECONNREFUSED: midtrans down')),
+    // Urutan: resetModules → doMock → import, supaya mock Midtrans terpakai
+    jest.resetModules();
+    jest.doMock('midtrans-client', () => ({
+      __esModule: true,
+      default: {
+        Snap: jest.fn().mockImplementation(() => ({
+          createTransaction: jest.fn().mockRejectedValue(new Error('ECONNREFUSED: midtrans down')),
+        })),
+        CoreApi: jest.fn(),
+      },
     }));
 
     const prismaMock = {
       user: { findUnique: jest.fn().mockResolvedValue({ email: 'buyer@test.com' }) },
       transaction: { create: jest.fn().mockResolvedValue({}), update: jest.fn() },
     };
-    const { POST } = await loadRouteWithMocks('@/app/api/payment/checkout/route.js', { prismaMock });
+    jest.doMock('@/lib/prisma', () => ({ __esModule: true, default: prismaMock }));
+    jest.doMock('@/lib/auth', () => ({
+      __esModule: true,
+      getSession: jest.fn().mockResolvedValue({ userId: 'u-valid', role: 'USER' }),
+    }));
+
+    const { POST } = await import('@/app/api/payment/checkout/route.js');
     const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'u-valid' } });
     const res = await POST(req);
     expect(res.status).toBe(500);

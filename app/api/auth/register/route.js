@@ -13,7 +13,7 @@ export async function POST(request) {
       request.headers.get('x-real-ip') ??
       'unknown';
 
-    if (!rateLimit(ip, 10)) {
+    if (!rateLimit(ip, 10, 'register')) {
       return NextResponse.json(
         { error: 'Terlalu banyak permintaan. Coba lagi nanti.' },
         { status: 429 }

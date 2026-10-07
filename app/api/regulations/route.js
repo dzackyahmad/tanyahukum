@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
+
+// Hanya kolom ini yang boleh dipakai untuk sorting (cegah error/bocor via orderBy bebas)
+const ALLOWED_SORT_FIELDS = ["title", "viewCount", "createdAt", "updatedAt"];
 
 export async function GET(req) {
     try {
@@ -9,15 +14,28 @@ export async function GET(req) {
         const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "10") || 10));
         const search = searchParams.get("search")?.trim() || "";
         const category = searchParams.get("category") || "";
-        const sortBy = searchParams.get("sortBy") || "title";
-        const order = searchParams.get("order") || (sortBy === "title" ? "asc" : "desc");
-        const userId = searchParams.get("userId") || null;
+        const requestedSort = searchParams.get("sortBy");
+        const sortBy = ALLOWED_SORT_FIELDS.includes(requestedSort) ? requestedSort : "title";
+        const requestedOrder = searchParams.get("order");
+        const order = ["asc", "desc"].includes(requestedOrder)
+            ? requestedOrder
+            : (sortBy === "title" ? "asc" : "desc");
+
+        // Atribusi log pencarian diambil dari sesi login (bukan query param yang bisa dipalsukan)
+        let userId = null;
+        try {
+            const session = await getSession();
+            userId = session?.userId || null;
+        } catch {
+            userId = null;
+        }
 
         // [LOG]: Simpan ke SearchLog (Asynchronous, don't await to keep response fast)
-        if (search) {
+        // Hanya catat maks 30 pencarian/menit per IP (cegah spam data analitik)
+        if (search && rateLimit(getClientIp(req), 30, "search-log")) {
             prisma.searchLog.create({
                 data: {
-                    query: search,
+                    query: search.slice(0, 200),
                     userId: userId 
                 }
             }).catch(err => console.error("SearchLog Error:", err));
@@ -77,10 +95,7 @@ export async function GET(req) {
     } catch (error) {
         console.error("API Regulations GET Error:", error);
         return NextResponse.json(
-            { 
-                error: "Terjadi kesalahan saat mengambil daftar regulasi.",
-                details: error.message 
-            },
+            { error: "Terjadi kesalahan saat mengambil daftar regulasi." },
             { status: 500 }
         );
     }

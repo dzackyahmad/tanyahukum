@@ -46,8 +46,9 @@ export async function POST(request) {
       );
     }
 
-    const body = await request.json();
-    const { email } = body;
+    const body = await request.json().catch(() => ({}));
+    // Normalisasi sama seperti register/login (email disimpan lowercase)
+    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
 
     if (!email) {
       return NextResponse.json(
@@ -84,7 +85,7 @@ export async function POST(request) {
     const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
 
     await prisma.user.update({
-      where: { email },
+      where: { id: user.id },
       data: {
         resetToken: hashedToken,
         resetTokenExpiry,
@@ -94,12 +95,16 @@ export async function POST(request) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
 
-    await sendResetPasswordEmail({ to: email, resetUrl });
+    const emailResult = await sendResetPasswordEmail({ to: user.email, resetUrl });
+    if (emailResult && emailResult.success === false) {
+      // Respons tetap generik (anti user-enumeration), tapi kegagalan dicatat di server
+      console.error('Forgot Password: gagal mengirim email reset');
+    }
 
-    // ✅ DEV ONLY: kirim resetUrl
+    // ✅ DEV LOKAL SAJA: kirim resetUrl (tidak pernah di production/preview/test)
     return NextResponse.json({
       message: genericMessage,
-      ...(process.env.NODE_ENV !== 'production' && { resetUrl }),
+      ...(process.env.NODE_ENV === 'development' && { resetUrl }),
     });
 
   } catch (error) {

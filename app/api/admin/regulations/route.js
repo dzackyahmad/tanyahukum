@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import prisma from '@/lib/prisma';
+import { requireAdmin, isSafeHttpUrl } from '@/lib/security';
 
 // GET: Ambil daftar dokumen hukum dengan Pagination & Search (Khusus Admin)
 export async function GET(req) {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const { searchParams } = new URL(req.url);
 
     const page = parseInt(searchParams.get("page") || "1");
@@ -54,6 +58,9 @@ export async function GET(req) {
 // POST: Input dokumen hukum baru (TETAP DIPERTAHANKAN UNTUK ADMIN)
 export async function POST(req) {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const body = await req.json();
     const { title, description, fileUrl, category, fileSize, fileName } = body;
 
@@ -62,6 +69,11 @@ export async function POST(req) {
         { error: "Judul dan link file wajib diisi" },
         { status: 400 }
       );
+    }
+
+    // Cegah URL berbahaya (mis. javascript:) tersimpan dan dibuka user
+    if (!isSafeHttpUrl(fileUrl)) {
+      return NextResponse.json({ error: "Link file harus berupa URL http/https" }, { status: 400 });
     }
 
     const newRegulation = await prisma.regulation.create({

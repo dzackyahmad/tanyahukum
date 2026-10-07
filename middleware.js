@@ -1,9 +1,52 @@
 import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose'; // <-- IMPORT PUSTAKA KEAMANAN
 
+const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+
+// Proteksi CSRF: request yang mengubah data dari browser wajib berasal dari origin sendiri.
+// Request server-to-server (mis. webhook Midtrans) tidak membawa header Origin → tetap lolos.
+function isCrossOriginMutation(request) {
+  const method = request.method;
+  if (!method || SAFE_METHODS.includes(method)) return false;
+
+  const origin = request.headers?.get?.('origin');
+  if (!origin) return false;
+
+  try {
+    return new URL(origin).host !== request.nextUrl.host;
+  } catch {
+    return true; // Origin tidak valid → tolak
+  }
+}
+
+async function getTokenRole(token) {
+  if (!token || !process.env.JWT_SECRET) return null;
+  try {
+    const encodedSecret = new TextEncoder().encode(process.env.JWT_SECRET);
+    const { payload } = await jwtVerify(token, encodedSecret, { algorithms: ['HS256'] });
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function middleware(request) {
   // 1. Ambil "ID Card" (token JWT) dari Cookies
   const token = request.cookies.get('token')?.value;
+  const pathname = request.nextUrl.pathname;
+
+  // 1a. Tolak request API yang mengubah data dari situs lain (CSRF)
+  if (pathname.startsWith('/api') && isCrossOriginMutation(request)) {
+    return NextResponse.json({ error: 'Forbidden: cross-origin request' }, { status: 403 });
+  }
+
+  // 1b. Halaman panel admin hanya untuk ADMIN (data tetap dilindungi API, ini menyembunyikan UI)
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    const role = await getTokenRole(token);
+    if (role !== 'ADMIN') {
+      return NextResponse.redirect(new URL('/chatbot', request.url));
+    }
+  }
 
   // 2. Proteksi Lorong Endpoint API Admin
   if (request.nextUrl.pathname.startsWith('/api/admin')) {
@@ -31,7 +74,7 @@ export async function middleware(request) {
       // 4. VERIFIKASI HOLOGRAM & BACA ISI (Ini yang bikin AMAN 100%)
       // jwtVerify akan mengecek apakah token ini benar-benar dicetak oleh aplikasi kita,
       // bukan token palsu buatan hacker.
-      const { payload } = await jwtVerify(token, encodedSecret);
+      const { payload } = await jwtVerify(token, encodedSecret, { algorithms: ['HS256'] });
 
       // 5. Cek Jabatan (Role)
       if (payload.role !== 'ADMIN') {

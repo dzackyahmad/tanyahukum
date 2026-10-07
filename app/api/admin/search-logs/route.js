@@ -4,10 +4,14 @@
 
 import { NextResponse } from "next/server";
 import prisma from '@/lib/prisma';
+import { requireAdmin } from '@/lib/security';
 
 // GET: Ambil daftar riwayat pencarian user (untuk Dashboard Admin)
 export async function GET() {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const logs = await prisma.searchLog.findMany({
       include: {
         user: {
@@ -29,6 +33,9 @@ export async function GET() {
 // POST: Mencatat pencarian baru (biasanya dipanggil API Pencarian Utama)
 export async function POST(req) {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const body = await req.json();
     const { query, userId } = body;
 

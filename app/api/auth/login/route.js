@@ -36,7 +36,7 @@ export async function POST(request) {
       request.headers.get('x-real-ip') ??
       'unknown';
 
-    if (!rateLimit(ip, 5)) {
+    if (!rateLimit(ip, 5, 'login')) {
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan login. Coba lagi dalam 1 menit.' },
         { status: 429 }
@@ -60,6 +60,14 @@ export async function POST(request) {
 
     // 3. Normalisasi email
     const normalizedEmail = email.trim().toLowerCase();
+
+    // Batasi percobaan per akun juga (brute-force dari banyak IP)
+    if (!rateLimit(normalizedEmail, 10, 'login-email')) {
+      return NextResponse.json(
+        { error: 'Terlalu banyak percobaan login. Coba lagi dalam 1 menit.' },
+        { status: 429 }
+      );
+    }
 
     // 4. Cari user di database
     const user = await prisma.user.findUnique({
