@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
+// Batas ukuran file yang diproksikan (cegah memori server habis)
+const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
+
 /**
  * GET /api/regulations/download?url=<encodedUrl>&name=<filename>
  * Server-side proxy: fetches PDF from Supabase and streams it back
@@ -21,6 +24,10 @@ export async function GET(req) {
     try {
       const parsed = new URL(fileUrl);
       const h = parsed.hostname;
+      // Hanya HTTPS — cegah downgrade ke HTTP
+      if (parsed.protocol !== "https:") {
+        return NextResponse.json({ error: "URL tidak diizinkan" }, { status: 400 });
+      }
       const allowed =
         h === 'supabase.co' || h.endsWith('.supabase.co') ||
         h === 'r2.dev' || h.endsWith('.r2.dev');
@@ -32,18 +39,29 @@ export async function GET(req) {
     }
 
     // Fetch the file from Supabase (server-side, no CORS issue)
+    // redirect: "manual" → redirect ke host lain tidak diikuti (cegah bypass allowlist)
     const upstream = await fetch(fileUrl, {
       headers: { Accept: "application/pdf,*/*" },
+      redirect: "manual",
     });
 
     if (!upstream.ok) {
       return NextResponse.json(
         { error: "Dokumen tidak ditemukan di storage" },
-        { status: upstream.status }
+        // Redirect (3xx) yang tidak diikuti dianggap gagal upstream
+        { status: upstream.status >= 400 ? upstream.status : 502 }
       );
     }
 
+    const declaredSize = Number(upstream.headers?.get?.("content-length") || 0);
+    if (declaredSize > MAX_DOWNLOAD_BYTES) {
+      return NextResponse.json({ error: "Ukuran dokumen terlalu besar" }, { status: 413 });
+    }
+
     const buffer = await upstream.arrayBuffer();
+    if (buffer.byteLength > MAX_DOWNLOAD_BYTES) {
+      return NextResponse.json({ error: "Ukuran dokumen terlalu besar" }, { status: 413 });
+    }
     const safeFileName = fileName.replace(/[^a-zA-Z0-9._\- ]/g, "_");
 
     return new NextResponse(buffer, {

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import prisma from '@/lib/prisma';
+import { requireAdmin } from '@/lib/security';
 
 export async function GET() {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const now = new Date();
     const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
     const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);

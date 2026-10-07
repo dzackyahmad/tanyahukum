@@ -1,43 +1,37 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
 
+// Opsi hapus cookie JWT (auth utama pakai JWT, bukan hanya Supabase)
+const CLEAR_TOKEN_COOKIE = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  path: '/',
+  expires: new Date(0),
+};
+
 /**
  * POST: Menghapus sesi pengguna (Logout)
  */
 export async function POST(request) {
+  // 1. Sign out Supabase (opsional). Kegagalan di sini TIDAK boleh
+  //    menghalangi penghapusan cookie JWT di bawah.
   try {
     const supabase = await createClient();
-
-    // 1. Cek apakah ada user yang aktif sebelum logout
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      // 2. Sign out secara global (menghapus session di server Supabase)
+      // Sign out secara global (menghapus session di server Supabase)
       await supabase.auth.signOut({ scope: 'global' });
     }
-
-    // 3. Hapus JWT cookie dan redirect ke login
-    const loginUrl = new URL('/login', request.url);
-    const response = NextResponse.redirect(loginUrl, { status: 303 });
-
-    // Hapus JWT cookie (auth utama pakai JWT, bukan hanya Supabase)
-    response.cookies.set('token', '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      expires: new Date(0),
-    });
-
-    return response;
-
   } catch (error) {
-    console.error("[LOGOUT_ERROR]:", error);
-    
-    // Jika gagal, tetap arahkan ke login dengan pesan error
-    const errorUrl = new URL('/login?error=logout_failed', request.url);
-    return NextResponse.json({
-      message: "Logout success"
-    });
+    console.error("[LOGOUT_SUPABASE_ERROR]:", error?.message);
   }
+
+  // 2. Selalu hapus JWT cookie, lalu redirect ke login
+  const loginUrl = new URL('/login', request.url);
+  const response = NextResponse.redirect(loginUrl, { status: 303 });
+  response.cookies.set('token', '', CLEAR_TOKEN_COOKIE);
+
+  return response;
 }

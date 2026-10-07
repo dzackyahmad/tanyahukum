@@ -4,6 +4,9 @@ import { VoyageEmbeddings } from "@langchain/community/embeddings/voyage";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { getSession } from "@/lib/auth";
+import { rateLimit } from "@/lib/rateLimit";
+
+const MAX_MESSAGE_LENGTH = 5000;
 
 // 1. Import Prisma Client
 import prisma from "@/lib/prisma";
@@ -22,6 +25,33 @@ export async function POST(req) {
 
     if (!message) {
       return NextResponse.json({ error: "Pesan tidak boleh kosong" }, { status: 400 });
+    }
+
+    if (typeof message !== "string" || message.length > MAX_MESSAGE_LENGTH) {
+      return NextResponse.json(
+        { error: `Pesan maksimal ${MAX_MESSAGE_LENGTH} karakter.` },
+        { status: 400 }
+      );
+    }
+
+    // Batasi frekuensi request per user (proteksi biaya AI & spam)
+    if (!rateLimit(userId, 15, "chat")) {
+      return NextResponse.json(
+        { error: "Terlalu banyak pertanyaan dalam waktu singkat. Coba lagi sebentar." },
+        { status: 429 }
+      );
+    }
+
+    // Pastikan chatId (jika ada) benar-benar milik user ini SEBELUM memanggil AI
+    let existingChat = null;
+    if (chatId) {
+      if (typeof chatId !== "string") {
+        return NextResponse.json({ error: "Sesi chat tidak ditemukan" }, { status: 404 });
+      }
+      existingChat = await prisma.chat.findUnique({ where: { id: chatId } });
+      if (!existingChat || existingChat.userId !== userId) {
+        return NextResponse.json({ error: "Sesi chat tidak ditemukan" }, { status: 404 });
+      }
     }
 
     // Cari data user di database
@@ -92,7 +122,9 @@ export async function POST(req) {
     const matches = queryResponse.matches || [];
     // [PERBAIKAN 3]: Format konteks dokumen diperjelas biar AI gampang bacanya
     const context = matches
-      .map((m, i) => `[DOKUMEN ${i + 1} | Sumber: ${m.metadata?.title|| 'Tidak diketahui'} | Hal: ${m.metadata?.page || '?'}]\n${m.metadata?.text || ''}`)
+      // Tanpa nomor urut ("DOKUMEN 1") agar AI mengutip nama dokumen, bukan nomornya.
+      // Nama dokumen harus utuh supaya referensi di frontend bisa dicocokkan & dibuka.
+      .map((m) => `[Sumber: ${m.metadata?.title|| 'Tidak diketahui'} | Hal: ${m.metadata?.page || '?'}]\n${m.metadata?.text || ''}`)
       .join("\n\n---\n\n");
 
     // ==========================================================
@@ -122,8 +154,10 @@ ATURAN WAJIB (HARUS DIIKUTI 100%):
    - Gunakan bullet points (-) atau penomoran (1, 2, 3) untuk menjabarkan daftar, syarat, atau langkah-langkah.
    - Buat paragraf yang singkat (maksimal 3-4 kalimat per paragraf).
 3. KUTIPAN SUMBER YANG JELAS: Setiap kali Anda menjelaskan suatu aturan, sanksi, atau pasal, Anda WAJIB meletakkan sumbernya di akhir poin atau paragraf tersebut. 
-   - Gunakan format ini: **(Sumber: [Nama Dokumen/Sumber], Hal: [Nomor Halaman])**.
-   - Contoh: "...dikenakan denda administratif maksimal Rp 50.000.000 **(Sumber: UU Cipta Kerja, Hal: 45)**."
+   - Gunakan format ini: **(Sumber: [Nama Dokumen], Hal: [Nomor Halaman])**.
+   - Tulis Nama Dokumen PERSIS seperti teks setelah "Sumber:" pada referensi di atas, lengkap dan tanpa disingkat. JANGAN menulis "DOKUMEN", nomor urut dokumen, atau hanya nomor pasal sebagai sumber.
+   - Jika satu poin berasal dari beberapa dokumen, pisahkan dengan titik koma: **(Sumber: [Dokumen A], Hal: [x]; [Dokumen B], Hal: [y])**.
+   - Contoh: "...wajib melaporkan lowongan kerja **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**."
 4. GAYA BAHASA: Gunakan bahasa Indonesia yang baku namun mudah dipahami. Jangan bertele-tele dan jangan menggunakan salam pembuka yang berlebihan.`;
 
     let response;
@@ -148,8 +182,8 @@ ATURAN WAJIB (HARUS DIIKUTI 100%):
     // ==========================================================
     
     // Pastikan user memiliki minimal satu chat session (Relasi Wajib)
-    const chatSession = chatId 
-      ? await prisma.chat.findUnique({ where: { id: chatId } })
+    const chatSession = existingChat
+      ? existingChat
       : await prisma.chat.create({
           data: { 
             title: message.slice(0, 30) + (message.length > 30 ? "..." : ""),
@@ -164,12 +198,18 @@ ATURAN WAJIB (HARUS DIIKUTI 100%):
     }
 
     // Kita gunakan Promise.all agar penyimpanan ke DB berjalan paralel dan lebih cepat
+    // Timestamp eksplisit: jawaban AI selalu 1 ms setelah pertanyaan, agar urutan riwayat
+    // tidak tertukar (sebelumnya keduanya bisa tersimpan di milidetik yang sama).
+    const askedAt = new Date();
+    const answeredAt = new Date(askedAt.getTime() + 1);
+
     await Promise.all([
       // Simpan pertanyaan User
       prisma.chatHistory.create({
         data: {
           role: "USER",
           content: message,
+          createdAt: askedAt,
           chat: {
             connect: { id: chatSession.id }
           },
@@ -183,6 +223,7 @@ ATURAN WAJIB (HARUS DIIKUTI 100%):
         data: {
           role: "AI",
           content: response.content,
+          createdAt: answeredAt,
           chat: {
             connect: { id: chatSession.id }
           },
@@ -236,9 +277,10 @@ export async function GET(req) {
 
     // B. AMBIL PESAN DALAM SATU CHAT
     if (chatId) {
+      // Scope ke userId supaya user tidak bisa membaca chat milik orang lain
       const messages = await prisma.chatHistory.findMany({
-        where: { chatId },
-        orderBy: { createdAt: "asc" },
+        where: { chatId, userId },
+        orderBy: [{ createdAt: "asc" }, { role: "asc" }], // timestamp kembar (data lama): USER dulu
       });
       return NextResponse.json({ history: messages });
     }
@@ -246,7 +288,7 @@ export async function GET(req) {
     // C. FALLBACK: SEMUA PESAN USER (Legacy)
     const history = await prisma.chatHistory.findMany({
       where: { userId },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "asc" }, { role: "asc" }], // timestamp kembar (data lama): USER dulu
     });
     return NextResponse.json({ history });
 
@@ -271,6 +313,10 @@ export async function PATCH(req) {
 
     if (!chatId || !title) {
       return NextResponse.json({ error: "Data tidak lengkap" }, { status: 400 });
+    }
+
+    if (typeof title !== "string" || title.length > 200) {
+      return NextResponse.json({ error: "Judul chat maksimal 200 karakter" }, { status: 400 });
     }
 
     const chat = await prisma.chat.findUnique({ where: { id: chatId } });

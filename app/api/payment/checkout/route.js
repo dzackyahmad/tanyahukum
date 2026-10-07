@@ -1,19 +1,28 @@
 import { NextResponse } from "next/server";
 import Midtrans from "midtrans-client";
-import prisma from "@/lib/prisma"; 
+import prisma from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
 
 const snap = new Midtrans.Snap({
-  isProduction: false, 
+  // Default sandbox (perilaku lama). Set MIDTRANS_IS_PRODUCTION=true saat go-live.
+  isProduction: process.env.MIDTRANS_IS_PRODUCTION === "true",
   serverKey: process.env.MIDTRANS_SERVER_KEY,
   clientKey: process.env.MIDTRANS_CLIENT_KEY,
 });
 
 export async function POST(req) {
   try {
-    const { userId } = await req.json();
-
-    if (!userId) {
+    // Identitas selalu dari JWT cookie, bukan dari body (cegah IDOR)
+    const session = await getSession();
+    if (!session?.userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.userId;
+
+    // Body userId tetap diterima demi kompatibilitas frontend, tapi harus cocok dengan sesi
+    const body = await req.json().catch(() => ({}));
+    if (body?.userId && body.userId !== userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // 1. Cari data User di Database untuk mengambil Email dan Tier-nya
@@ -34,7 +43,6 @@ export async function POST(req) {
     // 2. Definisikan Harga & Order ID
     const amount = 49900; 
     const orderId = `TRX-${Date.now()}-${userId.substring(0, 5)}`;
-    console.log("[CHECKOUT] Generated orderId:", orderId, "for userId:", userId);
 
     // 3. Buat Transaksi di Database kita (Status PENDING)
     await prisma.transaction.create({

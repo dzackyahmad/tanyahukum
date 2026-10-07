@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/server";
+import { requireAdmin } from '@/lib/security';
 
 export async function POST(req) {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const formData = await req.formData();
     const file = formData.get("file");
 
@@ -12,6 +16,12 @@ export async function POST(req) {
 
     if (file.type !== "application/pdf") {
       return NextResponse.json({ error: "File harus PDF" }, { status: 400 });
+    }
+
+    // Batas ukuran upload dokumen (cegah file raksasa menghabiskan memori/storage)
+    const MAX_PDF_SIZE = 50 * 1024 * 1024; // 50 MB
+    if (file.size > MAX_PDF_SIZE) {
+      return NextResponse.json({ error: "Ukuran file maksimal 50MB" }, { status: 400 });
     }
 
     const supabase = await createAdminClient();
@@ -26,6 +36,12 @@ export async function POST(req) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Validasi isi file benar-benar PDF (MIME type dari client bisa dipalsukan)
+    // (spesifikasi PDF mengizinkan header "%PDF-" berada di 1024 byte pertama)
+    if (!buffer.subarray(0, 1024).toString("latin1").includes("%PDF-")) {
+      return NextResponse.json({ error: "File harus PDF" }, { status: 400 });
+    }
     const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
     const uniqueFileName = `${Date.now()}_${safeFileName}`;
 

@@ -103,6 +103,7 @@ export default function Header({ onOpenSubscription, onOpenAuth }) {
         {/* ===== USER FREE ===== */}
         {user && user.tier !== "PRO" && (
           <button
+            data-tour="subscription"
             onClick={handleOpenSubscription}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 transition 
             text-white px-4 py-2 rounded-xl shadow-md text-sm font-medium"
@@ -115,6 +116,7 @@ export default function Header({ onOpenSubscription, onOpenAuth }) {
         {/* ===== USER PRO ===== */}
         {user && user.tier === "PRO" && (
           <button
+            data-tour="subscription"
             onClick={onOpenSubscription}
             className="flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 text-green-700 dark:text-green-400 rounded-lg font-medium transition-all active:scale-[0.98]"
           >

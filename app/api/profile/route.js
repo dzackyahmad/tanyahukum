@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import { verifyToken } from "../../../src/lib/auth-server";
+import { EMAIL_REGEX, isSafeHttpUrl } from "@/lib/security";
 // ==========================
 // GET PROFILE
 // ==========================
@@ -57,7 +58,7 @@ export async function GET(request) {
           const Midtrans = (await import("midtrans-client")).default;
           // Gunakan CoreApi untuk pengecekan status yang lebih reliabel
           const core = new Midtrans.CoreApi({
-            isProduction: false,
+            isProduction: process.env.MIDTRANS_IS_PRODUCTION === "true",
             serverKey: (process.env.MIDTRANS_SERVER_KEY || "").trim(),
             clientKey: (process.env.MIDTRANS_CLIENT_KEY || "").trim(),
           });
@@ -131,10 +132,18 @@ export async function PATCH(request) {
 
     const updateData = {};
 
-    if (name) updateData.name = name;
+    if (name) {
+      if (typeof name !== "string" || name.trim().length > 100) {
+        return NextResponse.json(
+          { error: "Nama maksimal 100 karakter" },
+          { status: 400 }
+        );
+      }
+      updateData.name = name.trim();
+    }
 
     if (avatarUrl !== undefined) {
-      if (avatarUrl !== null && !avatarUrl.startsWith("http")) {
+      if (avatarUrl !== null && !isSafeHttpUrl(avatarUrl)) {
         return NextResponse.json(
           { error: "URL Avatar tidak valid" },
           { status: 400 }
@@ -143,14 +152,32 @@ export async function PATCH(request) {
       updateData.avatarUrl = avatarUrl;
     }
 
-    if (email && email !== existingUser.email) {
-      updateData.email = email;
+    if (email) {
+      // Normalisasi sama seperti register/login supaya user tetap bisa login
+      const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+      if (!EMAIL_REGEX.test(normalizedEmail)) {
+        return NextResponse.json(
+          { error: "Format email tidak valid" },
+          { status: 400 }
+        );
+      }
+      if (normalizedEmail !== existingUser.email) {
+        updateData.email = normalizedEmail;
+      }
     }
 
     if (newPassword) {
       if (!currentPassword) {
         return NextResponse.json(
           { error: "Password lama wajib diisi" },
+          { status: 400 }
+        );
+      }
+
+      // Akun Google tidak punya password lokal
+      if (!existingUser.passwordHash) {
+        return NextResponse.json(
+          { error: "Akun ini login dengan Google dan tidak memiliki password." },
           { status: 400 }
         );
       }
@@ -175,7 +202,7 @@ export async function PATCH(request) {
     }
 
     if (personalContext !== undefined) {
-      if (personalContext !== null && personalContext.length > 500) {
+      if (personalContext !== null && (typeof personalContext !== "string" || personalContext.length > 500)) {
         return NextResponse.json(
           { error: "Konteks personal maksimal 500 karakter." },
           { status: 400 }
@@ -208,6 +235,13 @@ export async function PATCH(request) {
     });
 
   } catch (err) {
+    // Email sudah dipakai akun lain (unique constraint)
+    if (err?.code === "P2002") {
+      return NextResponse.json(
+        { error: "Email sudah digunakan" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401 }

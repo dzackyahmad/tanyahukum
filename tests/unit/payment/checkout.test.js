@@ -39,7 +39,7 @@ describe('POST /api/payment/checkout', () => {
     process.env.MIDTRANS_SERVER_KEY = 'SB-Mid-server-test';
     process.env.MIDTRANS_CLIENT_KEY = 'SB-Mid-client-test';
 
-    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: { userId: 'u-valid' } });
     const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'u-valid' } });
     const res = await POST(req);
 
@@ -57,7 +57,7 @@ describe('POST /api/payment/checkout', () => {
         update: jest.fn().mockResolvedValue({}),
       },
     };
-    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: { userId: 'u-valid' } });
     const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'u-valid' } });
     await POST(req);
 
@@ -75,7 +75,7 @@ describe('POST /api/payment/checkout', () => {
         update: jest.fn().mockResolvedValue({}),
       },
     };
-    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: { userId: 'u-valid' } });
     const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'u-valid' } });
     await POST(req);
 
@@ -84,12 +84,12 @@ describe('POST /api/payment/checkout', () => {
   });
 
   // ── AUTH GATE ───────────────────────────────────────────────────────────────
-  test('TC-PAY-04: returns 401 when userId is missing', async () => {
+  test('TC-PAY-04: returns 401 when not logged in (no session)', async () => {
     const prismaMock = {
       user: { findUnique: jest.fn() },
       transaction: { create: jest.fn(), update: jest.fn() },
     };
-    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: null });
     const req = makeMockRequest({ method: 'POST', jsonBody: {} });
     const res = await POST(req);
 
@@ -102,7 +102,7 @@ describe('POST /api/payment/checkout', () => {
       user: { findUnique: jest.fn().mockResolvedValue(null) },
       transaction: { create: jest.fn(), update: jest.fn() },
     };
-    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: { userId: 'ghost' } });
     const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'ghost' } });
     const res = await POST(req);
 
@@ -115,7 +115,9 @@ describe('POST /api/payment/checkout', () => {
       user: { findUnique: jest.fn().mockResolvedValue({ email: 'user@test.com' }) },
       transaction: { create: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) },
     };
-    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: { userId: 'u1' } });
+    const { getSession } = await import('@/lib/auth');
+    getSession.mockResolvedValueOnce({ userId: 'u1' }).mockResolvedValueOnce({ userId: 'u2' });
 
     // Two sequential requests should produce different orderIds
     const req1 = makeMockRequest({ method: 'POST', jsonBody: { userId: 'u1' } });
@@ -135,7 +137,7 @@ describe('POST /api/payment/checkout', () => {
       user: { findUnique: jest.fn().mockResolvedValue({ email: 'pro@test.com', tier: 'PRO' }) },
       transaction: { create: jest.fn(), update: jest.fn() },
     };
-    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: { userId: 'u-already-pro' } });
     const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'u-already-pro' } });
     const res = await POST(req);
 
@@ -143,6 +145,21 @@ describe('POST /api/payment/checkout', () => {
     const body = await res.json();
     expect(body.error).toMatch(/sudah berlangganan PRO/i);
     // Tidak boleh buat transaksi baru untuk user PRO
+    expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+  });
+
+  // ── IDOR PROTECTION ─────────────────────────────────────────────────────
+  test('TC-PAY-08: [SECURITY] userId di body yang beda dengan sesi ditolak 403', async () => {
+    const prismaMock = {
+      user: { findUnique: jest.fn() },
+      transaction: { create: jest.fn(), update: jest.fn() },
+    };
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: { userId: 'attacker' } });
+    const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'victim' } });
+    const res = await POST(req);
+
+    expect(res.status).toBe(403);
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
     expect(prismaMock.transaction.create).not.toHaveBeenCalled();
   });
 
@@ -166,6 +183,10 @@ describe('POST /api/payment/checkout', () => {
       transaction: { create: jest.fn().mockResolvedValue({}), update: jest.fn() },
     };
     jest.doMock('@/lib/prisma', () => ({ __esModule: true, default: prismaMock }));
+    jest.doMock('@/lib/auth', () => ({
+      __esModule: true,
+      getSession: jest.fn().mockResolvedValue({ userId: 'u-valid' }),
+    }));
 
     const { POST } = await import('@/app/api/payment/checkout/route.js');
     const req = makeMockRequest({ method: 'POST', jsonBody: { userId: 'u-valid' } });

@@ -5,9 +5,13 @@
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
+import { requireAdmin, SAFE_USER_SELECT, EMAIL_REGEX, validateUserAdminFields } from '@/lib/security';
 
 export async function GET() {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -58,6 +62,9 @@ export async function GET() {
 
 export async function POST(request) {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const body = await request.json();
     // PERBAIKAN: Tambahkan 'name' ke dalam destructuring
     const { email, password, role, tier, promptLimit, name } = body; 
@@ -66,11 +73,27 @@ export async function POST(request) {
       return NextResponse.json({ error: "Email dan Password wajib diisi" }, { status: 400 });
     }
 
+    // Normalisasi sama seperti register/login agar user bisa login
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 });
+    }
+    if (String(password).length < 8) {
+      return NextResponse.json({ error: "Password minimal 8 karakter" }, { status: 400 });
+    }
+
+    const fieldError = validateUserAdminFields({ role, tier, promptLimit });
+    if (fieldError) {
+      return NextResponse.json({ error: fieldError }, { status: 400 });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await prisma.user.create({
+      // Jangan kirim passwordHash/resetToken ke client
+      select: SAFE_USER_SELECT,
       data: {
-        email,
+        email: normalizedEmail,
         name, // PERBAIKAN: Masukkan nama ke database
         passwordHash: hashedPassword, 
         role: role || 'USER',
@@ -81,10 +104,11 @@ export async function POST(request) {
 
     return NextResponse.json(newUser, { status: 201 });
   } catch (error) {
-    console.error("DEBUG ERROR:", error); 
-    return NextResponse.json({ 
-        error: "Gagal membuat user", 
-        detail: error.message 
-    }, { status: 500 });
+    console.error("CREATE USER ERROR:", error?.message);
+    if (error?.code === 'P2002') {
+      return NextResponse.json({ error: "Email sudah digunakan" }, { status: 409 });
+    }
+    // Jangan ekspos detail error internal ke client
+    return NextResponse.json({ error: "Gagal membuat user" }, { status: 500 });
   }
 }

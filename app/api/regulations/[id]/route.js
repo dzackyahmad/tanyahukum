@@ -1,5 +1,27 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
+
+// Field publik saja (tanpa isi teks lengkap `content` & path internal storage)
+const PUBLIC_REGULATION_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  fileUrl: true,
+  fileName: true,
+  fileSize: true,
+  category: true,
+  isProcessed: true,
+  isActive: true,
+  viewCount: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
+// Maks 3 hitungan view per IP per dokumen per menit (cegah view count digelembungkan)
+function shouldCountView(req, id) {
+  return rateLimit(`${getClientIp(req)}:${id}`, 3, "regulation-view");
+}
 
 // ==========================================
 // 1. GET: MURNI UNTUK MENGAMBIL DATA (Aman di-cache oleh Vercel)
@@ -17,9 +39,11 @@ export async function GET(req, { params }) {
 
     const regulation = await prisma.regulation.findUnique({
       where: { id: id },
+      select: PUBLIC_REGULATION_SELECT,
     });
 
-    if (!regulation) {
+    // Dokumen yang dinonaktifkan admin tidak boleh diakses publik
+    if (!regulation || regulation.isActive === false) {
       return NextResponse.json(
         { error: "Data hukum tidak ditemukan." },
         { status: 404 }
@@ -27,10 +51,12 @@ export async function GET(req, { params }) {
     }
 
     // Increment viewCount setiap kali detail dokumen dibuka (fire-and-forget)
-    prisma.regulation.update({
-      where: { id: id },
-      data: { viewCount: { increment: 1 } },
-    }).catch(err => console.error("viewCount update error:", err));
+    if (shouldCountView(req, id)) {
+      prisma.regulation.update({
+        where: { id: id },
+        data: { viewCount: { increment: 1 } },
+      }).catch(err => console.error("viewCount update error:", err));
+    }
 
     return NextResponse.json({
       data: regulation,
@@ -60,14 +86,17 @@ export async function PATCH(req, { params }) {
       );
     }
 
-    await prisma.regulation.update({
-      where: { id: id },
-      data: {
-        viewCount: {
-          increment: 1, // Otomatis nambah +1 di database
+    // Spam dari IP yang sama tidak dihitung, tapi respons tetap sukses (flow frontend tidak berubah)
+    if (shouldCountView(req, id)) {
+      await prisma.regulation.update({
+        where: { id: id },
+        data: {
+          viewCount: {
+            increment: 1, // Otomatis nambah +1 di database
+          },
         },
-      },
-    });
+      });
+    }
 
     return NextResponse.json({
       message: "View count berhasil ditambahkan.",

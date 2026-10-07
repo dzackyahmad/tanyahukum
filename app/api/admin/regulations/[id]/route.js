@@ -2,10 +2,14 @@
 
 import { NextResponse } from "next/server";
 import prisma from '@/lib/prisma';
+import { requireAdmin, isSafeHttpUrl } from '@/lib/security';
 
 // DELETE: Hapus dokumen berdasarkan ID
 export async function DELETE(req, { params }) {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const { id } = await params;
 
     await prisma.regulation.delete({
@@ -25,11 +29,19 @@ export async function DELETE(req, { params }) {
 // PATCH: Update/Edit dokumen berdasarkan ID
 export async function PATCH(req, { params }) {
   try {
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const { id } = await params; // Wajib await params di Next.js terbaru
     const body = await req.json();
     
     // Ambil data yang dikirim dari Frontend
     const { title, description, fileUrl, category } = body;
+
+    // Cegah URL berbahaya (mis. javascript:) tersimpan dan dibuka user
+    if (fileUrl !== undefined && fileUrl !== null && !isSafeHttpUrl(fileUrl)) {
+      return NextResponse.json({ error: "Link file harus berupa URL http/https" }, { status: 400 });
+    }
 
     // Update data di database
     const updatedRegulation = await prisma.regulation.update({

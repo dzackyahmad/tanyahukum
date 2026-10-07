@@ -80,7 +80,19 @@ export async function GET() {
 
             prisma.trendingIssue.findMany({
                 orderBy: { publishDate: 'desc' },
-                take: 3
+                take: 3,
+                // Jangan bocorkan createdBy (ID akun admin) ke semua user
+                select: {
+                    id: true,
+                    title: true,
+                    description: true,
+                    publishDate: true,
+                    newsLink: true,
+                    location: true,
+                    isActive: true,
+                    createdAt: true,
+                    updatedAt: true,
+                }
             })
         ]);
 

@@ -4,7 +4,8 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    // Kunci algoritma ke HS256 (sama dengan token yang dibuat lib/auth.js)
+    return jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] });
   } catch {
     throw new Error("Invalid token");
   }
