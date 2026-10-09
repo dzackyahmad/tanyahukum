@@ -11,6 +11,279 @@ const MAX_MESSAGE_LENGTH = 5000;
 // 1. Import Prisma Client
 import prisma from "@/lib/prisma";
 
+// ==========================================================
+// HELPER RAG (dipakai bersama oleh mode JSON & mode streaming)
+// ==========================================================
+
+const QUOTA_ERROR_MESSAGE = "Kuota AI hari ini telah habis. Silakan coba lagi nanti.";
+const GENERIC_ERROR_MESSAGE = "Terjadi kesalahan pada server saat memproses pertanyaan hukum.";
+
+function isQuotaError(err) {
+  return err?.status === 429 || err?.message?.includes("429") || err?.message?.includes("quota");
+}
+
+function createLlm(extra = {}) {
+  return new ChatGoogleGenerativeAI({
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: "gemini-2.5-flash",
+    temperature: 0.2,
+    ...extra,
+  });
+}
+
+// Ubah pertanyaan jadi vektor (Voyage) lalu cari potongan dokumen relevan (Pinecone)
+async function retrieveDocuments(message) {
+  const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
+  const index = pc.Index(process.env.PINECONE_INDEX_V2);
+
+  const embeddings = new VoyageEmbeddings({
+    apiKey: process.env.VOYAGEAI_API_KEY,
+    inputType: "query",
+    modelName: "voyage-law-2",
+  });
+
+  const queryVector = await embeddings.embedQuery(message);
+  const queryResponse = await index.query({
+    vector: queryVector,
+    topK: 50,
+    includeMetadata: true,
+  });
+
+  const matches = queryResponse.matches || [];
+  // [PERBAIKAN 3]: Format konteks dokumen diperjelas biar AI gampang bacanya
+  const context = matches
+    // Tanpa nomor urut ("DOKUMEN 1") agar AI mengutip nama dokumen, bukan nomornya.
+    // Nama dokumen harus utuh supaya referensi di frontend bisa dicocokkan & dibuka.
+    .map((m) => `[Sumber: ${m.metadata?.title|| 'Tidak diketahui'} | Hal: ${m.metadata?.page || '?'}]\n${m.metadata?.text || ''}`)
+    .join("\n\n---\n\n");
+
+  return { matches, context };
+}
+
+function buildSystemPrompt(context, user) {
+  // ==========================================================
+  // [PERBAIKAN 1]: Personalisasi sebagai "Konteks Pasif" (Invisible Context)
+  // ==========================================================
+  const userCustomInstructions = user.personalContext
+    ? `\n[INFO LATAR BELAKANG PENGGUNA: "${user.personalContext}"]\n(PENTING: Gunakan info pengguna ini HANYA sebagai konteks untuk memahami niat pertanyaannya. JANGAN menyebutkan atau mengulang profil ini di dalam kalimat jawabanmu, kecuali pengguna bertanya langsung tentang dirinya. Berikan jawaban yang objektif dan to-the-point!)\n`
+    : "";
+
+  // ==========================================================
+  // [PERBAIKAN 2 & 3]: System Prompt dengan Aturan Format & Kutipan yang Strict
+  // ==========================================================
+  return `Anda adalah TanyaHukum, asisten hukum Indonesia yang ahli, profesional, dan terpercaya.
+
+TUGAS UTAMA: Jawab pertanyaan pengguna HANYA berdasarkan referensi Dokumen Hukum di bawah ini.
+
+=== DOKUMEN HUKUM ===
+${context}
+=====================
+${userCustomInstructions}
+
+ATURAN WAJIB (HARUS DIIKUTI 100%):
+1. KEAKURATAN: Jika jawaban tidak ada di Dokumen Hukum di atas, katakan: "Maaf, berdasarkan database hukum saat ini, saya belum menemukan informasi yang spesifik terkait pertanyaan Anda." Jangan pernah mengarang hukum/pasal!
+2. FORMAT JAWABAN (MARKDOWN): Gunakan format Markdown agar mudah dibaca. 
+   - Gunakan **huruf tebal (bold)** untuk istilah hukum atau poin penting.
+   - Gunakan bullet points (-) atau penomoran (1, 2, 3) untuk menjabarkan daftar, syarat, atau langkah-langkah.
+   - Buat paragraf yang singkat (maksimal 3-4 kalimat per paragraf).
+3. KUTIPAN SUMBER YANG JELAS: Setiap kali Anda menjelaskan suatu aturan, sanksi, atau pasal, Anda WAJIB meletakkan sumbernya di akhir poin atau paragraf tersebut. 
+   - Gunakan format ini: **(Sumber: [Nama Dokumen], Hal: [Nomor Halaman])**.
+   - Tulis Nama Dokumen PERSIS seperti teks setelah "Sumber:" pada referensi di atas, lengkap dan tanpa disingkat. JANGAN menulis "DOKUMEN", nomor urut dokumen, atau hanya nomor pasal sebagai sumber.
+   - Jika satu poin berasal dari beberapa dokumen, pisahkan dengan titik koma: **(Sumber: [Dokumen A], Hal: [x]; [Dokumen B], Hal: [y])**.
+   - Contoh: "...wajib melaporkan lowongan kerja **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**."
+4. GAYA BAHASA: Gunakan bahasa Indonesia yang baku namun mudah dipahami. Jangan bertele-tele dan jangan menggunakan salam pembuka yang berlebihan.`;
+}
+
+// Simpan pertanyaan & jawaban ke riwayat (dibuat SETELAH AI sukses menjawab)
+async function saveExchange({ existingChat, userId, message, answer }) {
+  // Pastikan user memiliki minimal satu chat session (Relasi Wajib)
+  const chatSession = existingChat
+    ? existingChat
+    : await prisma.chat.create({
+        data: {
+          title: message.slice(0, 30) + (message.length > 30 ? "..." : ""),
+          user: {
+            connect: { id: userId }
+          }
+        }
+      });
+
+  if (!chatSession) return null;
+
+  // Kita gunakan Promise.all agar penyimpanan ke DB berjalan paralel dan lebih cepat
+  // Timestamp eksplisit: jawaban AI selalu 1 ms setelah pertanyaan, agar urutan riwayat
+  // tidak tertukar (sebelumnya keduanya bisa tersimpan di milidetik yang sama).
+  const askedAt = new Date();
+  const answeredAt = new Date(askedAt.getTime() + 1);
+
+  await Promise.all([
+    // Simpan pertanyaan User
+    prisma.chatHistory.create({
+      data: {
+        role: "USER",
+        content: message,
+        createdAt: askedAt,
+        chat: {
+          connect: { id: chatSession.id }
+        },
+        user: {
+          connect: { id: userId }
+        }
+      }
+    }),
+    // Simpan jawaban AI
+    prisma.chatHistory.create({
+      data: {
+        role: "AI",
+        content: answer,
+        createdAt: answeredAt,
+        chat: {
+          connect: { id: chatSession.id }
+        },
+        user: {
+          connect: { id: userId }
+        }
+      }
+    }),
+    // Update title jika ini chat baru
+    prisma.chat.update({
+      where: { id: chatSession.id },
+      data: { updatedAt: new Date() }
+    })
+  ]);
+
+  return chatSession;
+}
+
+// ==========================================================
+// MODE STREAMING (transparansi proses)
+// Mengirim event NDJSON (satu JSON per baris) secara bertahap:
+//   { type: "step", step: "search" | "think" | "write", state: "active" | "done" }
+//   { type: "sources", count, docs: [{ title, page }] }   ← dokumen yang benar-benar dibaca AI
+//   { type: "thinking", text }                            ← ringkasan proses berpikir Gemini
+//   { type: "text", text }                                ← potongan jawaban
+//   { type: "done", chatId, answer, durationMs }
+//   { type: "error", error, limitReached? }
+// ==========================================================
+
+const MAX_SOURCE_DOCS = 8;
+
+// Ringkas daftar dokumen unik (urut relevansi) untuk ditampilkan di panel proses
+function summarizeSources(matches) {
+  const seen = new Map();
+  for (const m of matches) {
+    const title = m.metadata?.title;
+    if (!title || seen.has(title)) continue;
+    seen.set(title, { title, page: m.metadata?.page || null });
+  }
+  return { uniqueCount: seen.size, docs: [...seen.values()].slice(0, MAX_SOURCE_DOCS) };
+}
+
+// Konten chunk Gemini bisa string atau array bagian ({ type: "thinking" | "text" })
+function contentParts(content) {
+  if (typeof content === "string") return content ? [{ type: "text", text: content }] : [];
+  if (!Array.isArray(content)) return [];
+  return content
+    .map((p) => {
+      if (p?.type === "thinking") return { type: "thinking", text: p.thinking || "" };
+      if (p?.type === "text") return { type: "text", text: p.text || "" };
+      return null;
+    })
+    .filter((p) => p && p.text);
+}
+
+function streamChatResponse({ message, user, userId, existingChat }) {
+  const encoder = new TextEncoder();
+  const startedAt = Date.now();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      let closed = false;
+      const send = (event) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+        } catch {
+          closed = true; // klien memutus koneksi
+        }
+      };
+
+      try {
+        // 1. Cari dokumen
+        send({ type: "step", step: "search", state: "active" });
+        const { matches, context } = await retrieveDocuments(message);
+        const { uniqueCount, docs } = summarizeSources(matches);
+        send({ type: "sources", count: matches.length, uniqueCount, docs });
+        send({ type: "step", step: "search", state: "done" });
+
+        // 2. AI berpikir & menulis (ringkasan thinking Gemini ikut dikirim)
+        send({ type: "step", step: "think", state: "active" });
+        const llm = createLlm({ thinkingConfig: { includeThoughts: true } });
+
+        let answer = "";
+        let writing = false;
+        try {
+          const chunks = await llm.stream([
+            new SystemMessage(buildSystemPrompt(context, user)),
+            new HumanMessage(message),
+          ]);
+          for await (const chunk of chunks) {
+            for (const part of contentParts(chunk.content)) {
+              if (part.type === "thinking") {
+                send({ type: "thinking", text: part.text });
+              } else {
+                if (!writing) {
+                  writing = true;
+                  send({ type: "step", step: "think", state: "done" });
+                  send({ type: "step", step: "write", state: "active" });
+                }
+                answer += part.text;
+                send({ type: "text", text: part.text });
+              }
+            }
+          }
+        } catch (llmError) {
+          console.error("LLM Stream Error:", llmError);
+          if (isQuotaError(llmError)) {
+            send({ type: "error", error: QUOTA_ERROR_MESSAGE });
+            return;
+          }
+          throw llmError;
+        }
+
+        if (!answer.trim()) throw new Error("Jawaban AI kosong");
+
+        // 3. Simpan ke riwayat (sama seperti mode JSON)
+        const chatSession = await saveExchange({ existingChat, userId, message, answer });
+        if (!chatSession) {
+          send({ type: "error", error: "Sesi chat tidak ditemukan" });
+          return;
+        }
+
+        send({ type: "step", step: "write", state: "done" });
+        send({ type: "done", chatId: chatSession.id, answer, durationMs: Date.now() - startedAt });
+      } catch (error) {
+        console.error("API Chat Stream Error:", error);
+        send({ type: "error", error: GENERIC_ERROR_MESSAGE });
+      } finally {
+        if (!closed) {
+          closed = true;
+          try { controller.close(); } catch {}
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
 export async function POST(req) {
   try {
     // 1. Verifikasi identitas dari JWT cookie (bukan dari body)
@@ -94,83 +367,30 @@ export async function POST(req) {
     }
 
     // ==========================================================
-    // LOGIKA RAG AI (Sama persis seperti sebelumnya)
-    // ==========================================================
-    
-    const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
-    const index = pc.Index(process.env.PINECONE_INDEX_V2);
-
-    const embeddings = new VoyageEmbeddings({
-      apiKey: process.env.VOYAGEAI_API_KEY,
-      inputType: "query",
-      modelName: "voyage-law-2", 
-    });
-
-    const llm = new ChatGoogleGenerativeAI({
-      apiKey: process.env.GOOGLE_API_KEY,
-      model: "gemini-2.5-flash",
-      temperature: 0.2, 
-    });
-
-    const queryVector = await embeddings.embedQuery(message);
-    const queryResponse = await index.query({
-      vector: queryVector,
-      topK: 50, 
-      includeMetadata: true,
-    });
-
-    const matches = queryResponse.matches || [];
-    // [PERBAIKAN 3]: Format konteks dokumen diperjelas biar AI gampang bacanya
-    const context = matches
-      // Tanpa nomor urut ("DOKUMEN 1") agar AI mengutip nama dokumen, bukan nomornya.
-      // Nama dokumen harus utuh supaya referensi di frontend bisa dicocokkan & dibuka.
-      .map((m) => `[Sumber: ${m.metadata?.title|| 'Tidak diketahui'} | Hal: ${m.metadata?.page || '?'}]\n${m.metadata?.text || ''}`)
-      .join("\n\n---\n\n");
-
-    // ==========================================================
-    // [PERBAIKAN 1]: Personalisasi sebagai "Konteks Pasif" (Invisible Context)
-    // ==========================================================
-    const userCustomInstructions = user.personalContext 
-      ? `\n[INFO LATAR BELAKANG PENGGUNA: "${user.personalContext}"]\n(PENTING: Gunakan info pengguna ini HANYA sebagai konteks untuk memahami niat pertanyaannya. JANGAN menyebutkan atau mengulang profil ini di dalam kalimat jawabanmu, kecuali pengguna bertanya langsung tentang dirinya. Berikan jawaban yang objektif dan to-the-point!)\n`
-      : "";
-
-    // ==========================================================
-    // [PERBAIKAN 2 & 3]: System Prompt dengan Aturan Format & Kutipan yang Strict
+    // LOGIKA RAG AI
     // ==========================================================
 
-    const systemPrompt = `Anda adalah TanyaHukum, asisten hukum Indonesia yang ahli, profesional, dan terpercaya.
+    // Mode streaming (opsional): frontend mengirim { stream: true } untuk menerima
+    // proses secara langsung (tahap pencarian, dokumen, ringkasan berpikir AI, teks jawaban).
+    // Tanpa flag ini, respons tetap JSON seperti sebelumnya.
+    if (body.stream === true) {
+      return streamChatResponse({ message, user, userId, existingChat });
+    }
 
-TUGAS UTAMA: Jawab pertanyaan pengguna HANYA berdasarkan referensi Dokumen Hukum di bawah ini.
-
-=== DOKUMEN HUKUM ===
-${context}
-=====================
-${userCustomInstructions}
-
-ATURAN WAJIB (HARUS DIIKUTI 100%):
-1. KEAKURATAN: Jika jawaban tidak ada di Dokumen Hukum di atas, katakan: "Maaf, berdasarkan database hukum saat ini, saya belum menemukan informasi yang spesifik terkait pertanyaan Anda." Jangan pernah mengarang hukum/pasal!
-2. FORMAT JAWABAN (MARKDOWN): Gunakan format Markdown agar mudah dibaca. 
-   - Gunakan **huruf tebal (bold)** untuk istilah hukum atau poin penting.
-   - Gunakan bullet points (-) atau penomoran (1, 2, 3) untuk menjabarkan daftar, syarat, atau langkah-langkah.
-   - Buat paragraf yang singkat (maksimal 3-4 kalimat per paragraf).
-3. KUTIPAN SUMBER YANG JELAS: Setiap kali Anda menjelaskan suatu aturan, sanksi, atau pasal, Anda WAJIB meletakkan sumbernya di akhir poin atau paragraf tersebut. 
-   - Gunakan format ini: **(Sumber: [Nama Dokumen], Hal: [Nomor Halaman])**.
-   - Tulis Nama Dokumen PERSIS seperti teks setelah "Sumber:" pada referensi di atas, lengkap dan tanpa disingkat. JANGAN menulis "DOKUMEN", nomor urut dokumen, atau hanya nomor pasal sebagai sumber.
-   - Jika satu poin berasal dari beberapa dokumen, pisahkan dengan titik koma: **(Sumber: [Dokumen A], Hal: [x]; [Dokumen B], Hal: [y])**.
-   - Contoh: "...wajib melaporkan lowongan kerja **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**."
-4. GAYA BAHASA: Gunakan bahasa Indonesia yang baku namun mudah dipahami. Jangan bertele-tele dan jangan menggunakan salam pembuka yang berlebihan.`;
+    const { context } = await retrieveDocuments(message);
+    const llm = createLlm();
 
     let response;
     try {
       response = await llm.invoke([
-        new SystemMessage(systemPrompt),
+        new SystemMessage(buildSystemPrompt(context, user)),
         new HumanMessage(message),
       ]);
     } catch (llmError) {
       console.error("LLM Error:", llmError);
-      if (llmError?.status === 429 || llmError?.message?.includes("429") || llmError?.message?.includes("quota")) {
+      if (isQuotaError(llmError)) {
         return NextResponse.json(
-          { error: "Kuota AI hari ini telah habis. Silakan coba lagi nanti." },
+          { error: QUOTA_ERROR_MESSAGE },
           { status: 429 }
         );
       }
@@ -180,64 +400,11 @@ ATURAN WAJIB (HARUS DIIKUTI 100%):
     // ==========================================================
     // 4. Rekam Jejak ke Database (Setelah AI sukses menjawab)
     // ==========================================================
-    
-    // Pastikan user memiliki minimal satu chat session (Relasi Wajib)
-    const chatSession = existingChat
-      ? existingChat
-      : await prisma.chat.create({
-          data: { 
-            title: message.slice(0, 30) + (message.length > 30 ? "..." : ""),
-            user: {
-              connect: { id: userId }
-            }
-          }
-        });
+    const chatSession = await saveExchange({ existingChat, userId, message, answer: response.content });
 
     if (!chatSession) {
        return NextResponse.json({ error: "Sesi chat tidak ditemukan" }, { status: 404 });
     }
-
-    // Kita gunakan Promise.all agar penyimpanan ke DB berjalan paralel dan lebih cepat
-    // Timestamp eksplisit: jawaban AI selalu 1 ms setelah pertanyaan, agar urutan riwayat
-    // tidak tertukar (sebelumnya keduanya bisa tersimpan di milidetik yang sama).
-    const askedAt = new Date();
-    const answeredAt = new Date(askedAt.getTime() + 1);
-
-    await Promise.all([
-      // Simpan pertanyaan User
-      prisma.chatHistory.create({
-        data: {
-          role: "USER",
-          content: message,
-          createdAt: askedAt,
-          chat: {
-            connect: { id: chatSession.id }
-          },
-          user: {
-            connect: { id: userId }
-          }
-        }
-      }),
-      // Simpan jawaban AI
-      prisma.chatHistory.create({
-        data: {
-          role: "AI",
-          content: response.content,
-          createdAt: answeredAt,
-          chat: {
-            connect: { id: chatSession.id }
-          },
-          user: {
-            connect: { id: userId }
-          }
-        }
-      }),
-      // Update title jika ini chat baru
-      prisma.chat.update({
-        where: { id: chatSession.id },
-        data: { updatedAt: new Date() }
-      })
-    ]);
 
     // 5. Kembalikan respons ke Frontend
     return NextResponse.json({ answer: response.content, chatId: chatSession.id });

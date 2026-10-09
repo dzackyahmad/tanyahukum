@@ -1,3 +1,5 @@
+import { clearProcessCache } from "./processCache";
+
 // ==============================
 // GET PROFILE
 // ==============================
@@ -95,6 +97,7 @@ export async function logout() {
   localStorage.removeItem("user");
   localStorage.removeItem("active_conversation_id");
   localStorage.removeItem("conversations");
+  clearProcessCache();
 
   // 🔥 trigger global update
   window.dispatchEvent(new Event("auth-change"));
@@ -122,6 +125,7 @@ export async function deleteAccount() {
   localStorage.removeItem("user");
   localStorage.removeItem("active_conversation_id");
   localStorage.removeItem("conversations");
+  clearProcessCache();
 
   // 🔥 trigger global update
   window.dispatchEvent(new Event("auth-change"));
