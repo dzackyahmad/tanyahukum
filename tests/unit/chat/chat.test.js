@@ -351,3 +351,109 @@ describe('DELETE /api/chat', () => {
     expect(prismaMock.chat.delete).not.toHaveBeenCalled();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mode streaming (transparansi proses): POST /api/chat dengan { stream: true }
+// ─────────────────────────────────────────────────────────────────────────────
+describe('POST /api/chat — mode streaming', () => {
+  const parseEvents = async (res) =>
+    (await res.text()).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+
+  function mockStreamingServices({ chunks, streamError } = {}) {
+    jest.doMock('@pinecone-database/pinecone', () => ({
+      Pinecone: class {
+        Index() {
+          return {
+            query: jest.fn().mockResolvedValue({
+              matches: [
+                { metadata: { title: 'Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023', page: '1-25', text: 'Pasal 19 ...' } },
+                { metadata: { title: 'Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023', page: '26-50', text: 'Pasal 20 ...' } },
+                { metadata: { title: 'Regulasi Ketenagakerjaan - 2023pd3332009', page: '26-50', text: 'Pasal 39 ...' } },
+              ],
+            }),
+          };
+        }
+      },
+    }));
+    jest.doMock('@langchain/community/embeddings/voyage', () => ({
+      VoyageEmbeddings: class { async embedQuery() { return [0.1]; } },
+    }));
+    jest.doMock('@langchain/google-genai', () => ({
+      ChatGoogleGenerativeAI: class {
+        constructor(opts) { this.opts = opts; }
+        async stream() {
+          if (streamError) throw streamError;
+          return (async function* () { for (const c of chunks) yield { content: c }; })();
+        }
+      },
+    }));
+    jest.doMock('@langchain/core/messages', () => ({
+      HumanMessage: class { constructor(c) { this.content = c; } },
+      SystemMessage: class { constructor(c) { this.content = c; } },
+    }));
+  }
+
+  const prismaFor = (tier = 'PRO') => ({
+    user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', tier, promptLimit: 5, personalContext: null }) },
+    chatHistory: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue({}) },
+    chat: { create: jest.fn().mockResolvedValue({ id: 'chat-stream' }), update: jest.fn().mockResolvedValue({}) },
+  });
+
+  test('TC-CHAT-25: mengirim tahap proses, dokumen, thinking, teks, lalu done — dan menyimpan jawaban utuh', async () => {
+    mockStreamingServices({
+      chunks: [
+        [{ type: 'thinking', thinking: 'Menganalisis pasal PKWT...' }],
+        'PKWT paling lama ',
+        [{ type: 'text', text: '5 tahun.' }],
+      ],
+    });
+    const prismaMock = prismaFor();
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+
+    const res = await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Batas PKWT?', stream: true } }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('ndjson');
+
+    const events = await parseEvents(res);
+    const types = events.map((e) => (e.type === 'step' ? `${e.step}:${e.state}` : e.type));
+    expect(types).toEqual([
+      'search:active', 'sources', 'search:done',
+      'think:active', 'thinking', 'think:done', 'write:active',
+      'text', 'text', 'write:done', 'done',
+    ]);
+
+    const sources = events.find((e) => e.type === 'sources');
+    expect(sources.count).toBe(3);
+    expect(sources.uniqueCount).toBe(2); // dokumen unik, bukan potongan
+    expect(sources.docs[0]).toEqual({ title: 'Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023', page: '1-25' });
+
+    const done = events.at(-1);
+    expect(done.answer).toBe('PKWT paling lama 5 tahun.');
+    expect(done.chatId).toBe('chat-stream');
+
+    // Riwayat tersimpan sama seperti mode JSON (thinking TIDAK ikut disimpan)
+    const aiSave = prismaMock.chatHistory.create.mock.calls.find(([a]) => a.data.role === 'AI')[0];
+    expect(aiSave.data.content).toBe('PKWT paling lama 5 tahun.');
+  });
+
+  test('TC-CHAT-26: kuota Gemini habis saat streaming → event error, riwayat tidak disimpan', async () => {
+    mockStreamingServices({ streamError: Object.assign(new Error('quota exceeded'), { status: 429 }) });
+    const prismaMock = prismaFor();
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+
+    const events = await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true } })));
+    expect(events.at(-1)).toEqual({ type: 'error', error: expect.stringMatching(/kuota/i) });
+    expect(prismaMock.chatHistory.create).not.toHaveBeenCalled();
+  });
+
+  test('TC-CHAT-27: batas kuota harian tetap berlaku di mode streaming (403 JSON sebelum stream dimulai)', async () => {
+    mockStreamingServices({ chunks: ['x'] });
+    const prismaMock = prismaFor('FREE');
+    prismaMock.chatHistory.count.mockResolvedValue(5);
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+
+    const res = await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true } }));
+    expect(res.status).toBe(403);
+    expect((await res.json()).limitReached).toBe(true);
+  });
+});

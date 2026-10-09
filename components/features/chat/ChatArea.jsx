@@ -4,14 +4,16 @@ import { useState, useEffect, useRef } from "react";
 import Header from "@/components/layout/Header";
 import LegalResponse from "./LegalResponse";
 import AIDisclaimer from "./AIDisclaimer";
+import ProcessPanel from "./ProcessPanel";
 
 import {
-  sendMessage,
+  sendMessageStream,
   createNewConversation,
   getCurrentConversationId,
   getChatMessages,
   setActiveConversation
 } from "@/src/lib/chat";
+import { saveProcess, getProcess } from "@/src/lib/processCache";
 
 // RANDOM TEXT
 const EMPTY_TITLES = [
@@ -99,7 +101,10 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
         setLoading(true);
         try {
           const history = await getChatMessages(user.id, activeId);
-          setMessages(history);
+          // Pasang kembali proses jawaban yang tersimpan di browser (jika ada)
+          setMessages(history.map((m) =>
+            m.role === "assistant" ? { ...m, process: getProcess(activeId, m.content) } : m
+          ));
         } catch (err) {
           console.error("Failed to load messages:", err);
           setMessages([]);
@@ -119,7 +124,10 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
     window.addEventListener("load-conversation", loadConversation);
     return () =>
       window.removeEventListener("load-conversation", loadConversation);
-  }, [user]);
+    // Bergantung pada user.id (bukan objek user): event "auth-change" setelah menjawab
+    // membuat objek user baru → dulu memicu muat ulang dari DB & menghapus panel proses.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // ==============================
   // SEND MESSAGE
@@ -150,15 +158,57 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
       content: text,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // Placeholder jawaban AI yang diisi bertahap oleh event streaming (transparansi proses)
+    const streamKey = `stream-${Date.now()}`;
+    const placeholder = {
+      role: "assistant",
+      content: "",
+      streaming: true,
+      key: streamKey,
+      process: {
+        steps: { search: "pending", think: "pending", write: "pending" },
+        sources: null,
+        thinking: "",
+        done: false,
+        durationMs: null,
+        startedAt: Date.now(),      // untuk penghitung waktu berjalan
+        stepDurations: {},          // ms per tahap: { search, think, write }
+      },
+    };
+    // Waktu mulai tiap tahap, diukur saat event tiba di browser
+    const stepStartedAt = {};
+    const updateStreamMsg = (fn) =>
+      setMessages((prev) => prev.map((m) => (m.key === streamKey ? fn(m) : m)));
+
+    setMessages((prev) => [...prev, userMessage, placeholder]);
     setMessage("");
     setLoading(true);
 
     try {
-      const data = await sendMessage({
+      const data = await sendMessageStream({
         message: text,
-        userId: user.id,
-        chatId: currentChatId
+        chatId: currentChatId,
+        onEvent: (event) => {
+          if (event.type === "step") {
+            const now = Date.now();
+            if (event.state === "active") stepStartedAt[event.step] = now;
+            const duration = event.state === "done" && stepStartedAt[event.step] ? now - stepStartedAt[event.step] : null;
+            updateStreamMsg((m) => ({
+              ...m,
+              process: {
+                ...m.process,
+                steps: { ...m.process.steps, [event.step]: event.state },
+                stepDurations: duration !== null ? { ...m.process.stepDurations, [event.step]: duration } : m.process.stepDurations,
+              },
+            }));
+          } else if (event.type === "sources") {
+            updateStreamMsg((m) => ({ ...m, process: { ...m.process, sources: { count: event.count, uniqueCount: event.uniqueCount, docs: event.docs || [] } } }));
+          } else if (event.type === "thinking") {
+            updateStreamMsg((m) => ({ ...m, process: { ...m.process, thinking: m.process.thinking + event.text } }));
+          } else if (event.type === "text") {
+            updateStreamMsg((m) => ({ ...m, content: m.content + event.text }));
+          }
+        },
       });
 
       // Update chatId if it was a new chat
@@ -176,20 +226,31 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
         window.dispatchEvent(new Event("auth-change"));
       }
 
-      const aiMessage = {
-        role: "assistant",
-        content: data.answer,
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
+      // Finalisasi: jawaban lengkap dari server + tandai proses selesai, lalu simpan
+      // prosesnya di browser agar tetap bisa dilihat setelah refresh / buka riwayat.
+      updateStreamMsg((m) => {
+        const finalMsg = {
+          ...m,
+          content: data.answer ?? m.content,
+          streaming: false,
+          process: {
+            ...m.process,
+            steps: { search: "done", think: "done", write: "done" },
+            done: true,
+            durationMs: data.durationMs ?? null,
+          },
+        };
+        saveProcess(data.chatId, finalMsg.content, finalMsg.process);
+        return finalMsg;
+      });
       window.dispatchEvent(new Event("auth-change"));
 
     } catch (err) {
-      const errorMsg = {
+      // Ganti placeholder dengan pesan error (tanpa panel proses)
+      updateStreamMsg(() => ({
         role: "assistant",
         content: err.error || "Terjadi kesalahan.",
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      }));
     } finally {
       setLoading(false);
       sendingRef.current = false;
@@ -306,11 +367,12 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
 
                       <div className="flex-1 min-w-0 sm:max-w-[92%]">
                         <div className="px-5 py-4 sm:px-6 sm:py-5 rounded-2xl rounded-tl-md bg-white dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700/60">
-                          <LegalResponse content={msg.content} />
+                          {msg.process && <ProcessPanel process={msg.process} />}
+                          {msg.content && <LegalResponse content={msg.content} />}
                         </div>
 
                         {/* ACTIONS (di bawah jawaban) */}
-                        <div className="mt-1.5 flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                        <div className={`mt-1.5 flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity ${msg.streaming ? "hidden" : ""}`}>
                           <ActionButton
                             icon="/icons/copy.svg"
                             label={copiedIndex === i ? "Tersalin" : "Salin"}
@@ -341,7 +403,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
                   )
                 )}
 
-                {loading && (
+                {loading && !messages.some((m) => m.streaming) && (
                   <div className="flex items-start gap-3">
                     <BotAvatar />
                     <div className="bg-white dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700/60 px-5 py-4 rounded-2xl rounded-tl-md flex gap-1.5 items-center">

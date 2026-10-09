@@ -76,6 +76,57 @@ export async function deleteChat(chatId) {
 }
 
 // ==============================
+// SEND MESSAGE (STREAMING) — transparansi proses
+// Membaca event NDJSON dari /api/chat ({ stream: true }) dan meneruskannya ke onEvent.
+// Error sebelum stream dimulai (401/403/429/...) tetap berupa JSON → dilempar seperti sendMessage.
+// ==============================
+export async function sendMessageStream({ message, chatId, onEvent }) {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, chatId, stream: true }),
+  });
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!res.ok || !contentType.includes("ndjson") || !res.body) {
+    const data = await res.json().catch(() => ({ error: "Terjadi kesalahan." }));
+    if (!res.ok) throw data;
+    return data; // fallback: server mengembalikan JSON biasa
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result = null;
+
+  const handleLine = (line) => {
+    if (!line.trim()) return;
+    let event;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      return;
+    }
+    if (event.type === "error") throw { error: event.error, limitReached: event.limitReached };
+    if (event.type === "done") result = { answer: event.answer, chatId: event.chatId, durationMs: event.durationMs };
+    onEvent?.(event);
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    lines.forEach(handleLine);
+  }
+  handleLine(buffer);
+
+  if (!result) throw { error: "Koneksi terputus sebelum jawaban selesai. Silakan coba lagi." };
+  return result;
+}
+
+// ==============================
 // SEND MESSAGE (API)
 // ==============================
 export async function sendMessage({ message, userId, chatId }) {
