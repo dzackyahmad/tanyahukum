@@ -1,0 +1,82 @@
+[
+  {
+    "id": "naker_101",
+    "domain": "Ketenagakerjaan",
+    "difficulty": "easy",
+    "source": "Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023 (Pasal 39)",
+    "user_input": "Menurut Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023, berapa lama paling lama PKWT berdasarkan jangka waktu dapat dibuat dan bagaimana ketentuan perpanjangannya?",
+    "reference": "Berdasarkan Pasal 39 Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023, PKWT berdasarkan jangka waktu dapat dibuat untuk paling lama 5 (lima) tahun. Jika jangka waktu PKWT akan berakhir dan pekerjaan belum selesai, PKWT dapat diperpanjang dengan jangka waktu sesuai kesepakatan antara Pengusaha dan Pekerja/Buruh, dengan ketentuan jangka waktu keseluruhan PKWT beserta perpanjangannya tidak lebih dari 5 (lima) tahun. Masa kerja Pekerja/Buruh dalam hal perpanjangan tetap dihitung sejak terjadinya Hubungan Kerja berdasarkan PKWT. Pengusaha yang bermaksud memperpanjang PKWT wajib memberitahukan maksudnya secara tertulis kepada pekerja/buruh paling lama 7 (tujuh) hari sebelum PKWT berakhir, dan PKWT, perpanjangan, serta pembaharuannya wajib dilaporkan kepada Perangkat Daerah yang menyelenggarakan urusan pemerintahan bidang tenaga kerja."
+  },
+  {
+    "id": "naker_102",
+    "domain": "Ketenagakerjaan",
+    "difficulty": "medium",
+    "source": "Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023 (perlindungan pekerja perempuan)",
+    "user_input": "Apa saja kewajiban pengusaha yang mempekerjakan pekerja/buruh perempuan antara pukul 23.00 sampai dengan 07.00 menurut Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023?",
+    "reference": "Menurut Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023, pengusaha dilarang mempekerjakan pekerja/buruh perempuan hamil yang menurut surat keterangan dokter berbahaya bagi kesehatan dan keselamatan kandungan maupun dirinya bila bekerja antara pukul 23.00 sampai dengan 07.00. Pengusaha yang mempekerjakan perempuan antara pukul 23.00 sampai dengan 07.00 wajib: (1) memberikan makanan dan minuman bergizi paling sedikit 1.400 kalori; (2) menjaga kesusilaan dan keamanan selama di tempat kerja; (3) menyediakan antar jemput bagi pekerja perempuan yang berangkat dan pulang bekerja antara pukul 23.00 sampai dengan 05.00; dan (4) melaporkan pelaksanaan kerja perempuan pada malam hari kepada Perangkat Daerah bidang tenaga kerja dengan menyertakan daftar pekerja perempuan (nama, alamat, dan usia), nama dan alamat perusahaan, jenis kegiatan perusahaan, serta persetujuan dari orang tua/wali/suami. Pelanggaran dikenakan sanksi administratif mulai dari teguran, peringatan tertulis, pembatasan dan pembekuan kegiatan usaha, pembatalan persetujuan atau pendaftaran, penghentian sementara alat produksi, hingga pencabutan izin."
+  },
+  {
+    "id": "naker_103",
+    "domain": "Ketenagakerjaan",
+    "difficulty": "medium",
+    "source": "Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023 (perlindungan pekerja perempuan)",
+    "user_input": "Apa saja hak pekerja/buruh perempuan terkait haid, melahirkan, dan menyusui, serta larangan pemutusan hubungan kerja terhadap mereka menurut Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023?",
+    "reference": "Menurut Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023: pengusaha dilarang melakukan pemutusan hubungan kerja terhadap pekerja/buruh perempuan dengan alasan menikah, hamil, melahirkan, gugur kandungan, atau menyusui bayinya. Pekerja/buruh perempuan yang dalam masa haid merasakan sakit dan memberitahukan kepada pengusaha tidak wajib bekerja pada hari pertama dan kedua waktu haid. Pekerja/buruh perempuan berhak memperoleh istirahat selama 1,5 (satu setengah) bulan sebelum saatnya melahirkan dan 1,5 (satu setengah) bulan sesudah melahirkan menurut perhitungan dokter kandungan atau bidan. Pengusaha wajib mempekerjakan kembali pekerja/buruh perempuan yang selesai menjalani cuti hamil/melahirkan pada jabatan semula atau yang setara tanpa mengurangi hak-haknya. Pekerja/buruh perempuan yang anaknya masih menyusui harus diberi kesempatan sepatutnya pada waktu kerja untuk menyusui anaknya."
+  },
+  {
+    "id": "naker_104",
+    "domain": "Ketenagakerjaan",
+    "difficulty": "easy",
+    "source": "Peraturan Pemerintah Nomor 8 Tahun 2005 (Pasal 2-4, 19, 21)",
+    "user_input": "Siapa yang membentuk LKS Tripartit Nasional, apa tugasnya, dan dari unsur apa saja keanggotaannya menurut PP Nomor 8 Tahun 2005?",
+    "reference": "Menurut Peraturan Pemerintah Nomor 8 Tahun 2005, LKS Tripartit Nasional dibentuk oleh Presiden dan bertanggung jawab kepada Presiden (Pasal 2). Tugasnya adalah memberikan pertimbangan, saran, dan pendapat kepada Presiden dan pihak terkait dalam penyusunan kebijakan dan pemecahan masalah ketenagakerjaan secara nasional (Pasal 3). Keanggotaannya terdiri dari unsur Pemerintah, organisasi pengusaha, dan serikat pekerja/serikat buruh (Pasal 4). Sidang LKS Tripartit Nasional dilakukan dengan mengutamakan musyawarah untuk mufakat (Pasal 19), dan biayanya dibebankan kepada anggaran belanja instansi Pemerintah yang bertanggung jawab di bidang ketenagakerjaan (Pasal 21)."
+  },
+  {
+    "id": "naker_105",
+    "domain": "Ketenagakerjaan",
+    "difficulty": "hard",
+    "source": "Peraturan Daerah Nomor 6 Tahun 2023 tentang Pelayanan Ketenagakerjaan",
+    "user_input": "Berapa ketentuan waktu kerja normal, berapa batas waktu kerja lembur, dan apa syarat serta kewajiban pengusaha yang mempekerjakan pekerja melebihi waktu kerja menurut Peraturan Daerah Nomor 6 Tahun 2023 tentang Pelayanan Ketenagakerjaan?",
+    "reference": "Menurut Peraturan Daerah Nomor 6 Tahun 2023 tentang Pelayanan Ketenagakerjaan, waktu kerja meliputi: (a) 7 (tujuh) jam 1 (satu) hari dan 40 (empat puluh) jam 1 (satu) minggu untuk 6 (enam) hari kerja dalam 1 minggu; atau (b) 8 (delapan) jam 1 (satu) hari dan 40 (empat puluh) jam 1 (satu) minggu untuk 5 (lima) hari kerja dalam 1 minggu. Pengusaha yang mempekerjakan pekerja/buruh melebihi waktu kerja tersebut harus memenuhi syarat: ada persetujuan pekerja/buruh yang bersangkutan, dan waktu kerja lembur hanya dapat dilakukan paling lama 4 (empat) jam dalam 1 (satu) hari dan 18 (delapan belas) jam dalam 1 (satu) minggu. Pengusaha tersebut wajib membayar upah kerja lembur. Ketentuan batas waktu kerja lembur tidak berlaku bagi sektor usaha atau pekerjaan tertentu."
+  },
+  {
+    "id": "perdata_101",
+    "domain": "Perdata",
+    "difficulty": "easy",
+    "source": "Peraturan Pemerintah Nomor 37 Tahun 2007 (Pasal 1)",
+    "user_input": "Apa yang dimaksud dengan NIK, Kartu Keluarga, dan KTP menurut PP Nomor 37 Tahun 2007?",
+    "reference": "Menurut Pasal 1 Peraturan Pemerintah Nomor 37 Tahun 2007: Nomor Induk Kependudukan (NIK) adalah nomor identitas Penduduk yang bersifat unik atau khas, tunggal, dan melekat pada seseorang yang terdaftar sebagai Penduduk Indonesia. Kartu Keluarga (KK) adalah kartu identitas keluarga yang memuat data tentang nama, susunan dan hubungan dalam keluarga, serta identitas anggota keluarga. Kartu Tanda Penduduk (KTP) adalah identitas resmi Penduduk sebagai bukti diri yang diterbitkan oleh Instansi Pelaksana yang berlaku di seluruh wilayah Negara Kesatuan Republik Indonesia."
+  },
+  {
+    "id": "perdata_102",
+    "domain": "Perdata",
+    "difficulty": "medium",
+    "source": "Peraturan Pemerintah Nomor 37 Tahun 2007 (Pasal 1 angka 23 & 32, Pasal 58-60)",
+    "user_input": "Apa yang dimaksud dengan data pribadi penduduk dan apa larangan bagi pengguna serta pemegang hak akses data pribadi penduduk menurut PP Nomor 37 Tahun 2007?",
+    "reference": "Menurut Peraturan Pemerintah Nomor 37 Tahun 2007, Data Pribadi adalah data perseorangan tertentu yang disimpan, dirawat, dan dijaga kebenaran serta dilindungi kerahasiaannya. Pengguna Data Pribadi Penduduk adalah instansi pemerintah dan swasta yang membutuhkan informasi data sesuai bidangnya. Instansi pemerintah dan swasta sebagai pengguna data pribadi penduduk dilarang menjadikan data pribadi penduduk sebagai bahan informasi publik (Pasal 58). Pemegang hak akses data pribadi penduduk dilarang menjadikan data pribadi penduduk sebagai bahan informasi publik sebelum mendapat persetujuan dari pemberi hak akses (Pasal 59). Untuk kepentingan keamanan negara, tindakan kepolisian, dan peradilan, data pribadi penduduk dapat diakses dengan persetujuan dari Menteri (Pasal 60)."
+  },
+  {
+    "id": "perdata_103",
+    "domain": "Perdata",
+    "difficulty": "easy",
+    "source": "Peraturan Pemerintah Nomor 37 Tahun 2007 (Pasal 33-34)",
+    "user_input": "Akta catatan sipil apa saja yang dapat diterbitkan kutipannya oleh Pejabat Pencatat Sipil pada UPTD Instansi Pelaksana menurut PP Nomor 37 Tahun 2007?",
+    "reference": "Menurut Pasal 33 Peraturan Pemerintah Nomor 37 Tahun 2007, Pejabat Pencatat Sipil pada UPTD Instansi Pelaksana berwenang menerbitkan Kutipan Akta Catatan Sipil yang meliputi akta: (a) kelahiran; (b) kematian; (c) perkawinan; (d) perceraian; dan (e) pengakuan anak. UPTD Instansi Pelaksana adalah satuan kerja di tingkat kecamatan yang melaksanakan pelayanan Pencatatan Sipil dengan kewenangan menerbitkan akta, dan menurut Pasal 34 wilayah kerjanya dapat meliputi 1 (satu) kecamatan atau lebih yang secara geografis berdekatan."
+  },
+  {
+    "id": "perdata_104",
+    "domain": "Perdata",
+    "difficulty": "medium",
+    "source": "Peraturan Pemerintah Nomor 37 Tahun 2007 (Pasal 1 angka 31, Pasal 52-53)",
+    "user_input": "Apa yang dimaksud dengan hak akses dalam administrasi kependudukan dan bagaimana pemberian hak akses kepada petugas di daerah diusulkan menurut PP Nomor 37 Tahun 2007?",
+    "reference": "Menurut Peraturan Pemerintah Nomor 37 Tahun 2007, Hak Akses adalah hak yang diberikan oleh Menteri kepada petugas yang ada pada Penyelenggara dan Instansi Pelaksana untuk dapat mengakses database kependudukan sesuai dengan izin yang diberikan. Hak akses dikecualikan dari data pribadi penduduk (Pasal 52). Pemberian hak akses kepada petugas pada penyelenggara provinsi, kabupaten/kota, dan Instansi Pelaksana diusulkan kepada Menteri melalui Direktur Jenderal (Pasal 53), dengan ketentuan: petugas pada Instansi Pelaksana dan penyelenggara kabupaten/kota diusulkan oleh bupati/walikota melalui gubernur, sedangkan petugas pada penyelenggara provinsi diusulkan oleh gubernur."
+  },
+  {
+    "id": "perdata_105",
+    "domain": "Perdata",
+    "difficulty": "hard",
+    "source": "Peraturan Pemerintah Nomor 37 Tahun 2007 (Pasal 1 angka 22 & 30, Pasal 2, Pasal 51 ayat 3)",
+    "user_input": "Siapa yang menyelenggarakan urusan administrasi kependudukan, apa yang dimaksud dengan SIAK dan Data Center, serta bagaimana alur data dalam penyelenggaraan hak akses antar tingkat penyelenggara menurut PP Nomor 37 Tahun 2007?",
+    "reference": "Menurut Peraturan Pemerintah Nomor 37 Tahun 2007, urusan Administrasi Kependudukan diselenggarakan oleh Pemerintah, pemerintah provinsi, dan pemerintah kabupaten/kota (Pasal 2). Sistem Informasi Administrasi Kependudukan (SIAK) adalah sistem informasi yang memanfaatkan teknologi informasi dan komunikasi untuk memfasilitasi pengelolaan informasi Administrasi Kependudukan di tingkat Penyelenggara dan Instansi Pelaksana sebagai satu kesatuan. Data Center adalah tempat/ruang penyimpanan perangkat database pada Penyelenggara Pusat yang menghimpun data kependudukan dari penyelenggara provinsi, penyelenggara kabupaten/kota, dan Instansi Pelaksana. Dalam menyelenggarakan hak akses (Pasal 51 ayat 3): penyelenggara pusat berdasarkan data dari penyelenggara provinsi; penyelenggara provinsi berdasarkan data dari penyelenggara kabupaten/kota; dan penyelenggara kabupaten/kota berdasarkan data dari Instansi Pelaksana."
+  }
+]

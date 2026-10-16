@@ -1,0 +1,1533 @@
+'==============================================================
+' SEQUENCE DIAGRAMS LENGKAP — SISTEM TANYAHUKUM
+' Mencakup seluruh alur API endpoint
+'==============================================================
+
+' ─────────────────────────────────────────────────────────────
+' SKINPARAM GLOBAL (berlaku untuk semua diagram di file ini)
+' ─────────────────────────────────────────────────────────────
+
+' ============================================================
+' SEQ-07: REGISTRASI EMAIL
+' ============================================================
+@startuml SEQ-07-Register
+title Sequence Diagram — Registrasi Email\nPOST /api/auth/register
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "RegisterForm\n(React)" as UI
+participant "POST /api/auth/register\n(Route Handler)" as API
+participant "rateLimit\n(LRU Cache)" as RL
+database "PostgreSQL\n(Prisma)" as DB
+participant "bcryptjs" as BCRYPT
+
+USER -> UI : isi form email + password\nklik Daftar Sekarang
+activate UI
+
+UI -> API : POST /api/auth/register\n{email, password}
+activate API
+
+API -> RL : rateLimit(ip, 10)
+activate RL
+RL --> API : allowed / blocked
+deactivate RL
+
+alt Rate limit tercapai
+  API --> UI : HTTP 429\n"Terlalu banyak permintaan"
+  UI --> USER : tampil pesan error
+end
+
+API -> API : normalisasi email\n(trim + toLowerCase)
+
+alt Email atau password kosong
+  API --> UI : HTTP 400\n"Email dan password wajib diisi"
+end
+
+alt Format email tidak valid
+  API --> UI : HTTP 400\n"Format email tidak valid"
+end
+
+alt Password < 8 karakter
+  API --> UI : HTTP 400\n"Password minimal 8 karakter"
+end
+
+API -> DB : user.findUnique({email})
+activate DB
+DB --> API : existingUser | null
+deactivate DB
+
+alt Email sudah terdaftar via Google
+  API --> UI : HTTP 409\n"Gunakan tombol Login with Google"
+  UI --> USER : tampil pesan hint Google
+end
+
+alt Email sudah terdaftar
+  API --> UI : HTTP 409\n"Email sudah digunakan"
+  UI --> USER : tampil pesan error
+end
+
+API -> BCRYPT : hash(password, saltRounds: 10)
+activate BCRYPT
+BCRYPT --> API : passwordHash
+deactivate BCRYPT
+
+API -> DB : user.create(\n  {email, passwordHash}\n  default: tier=FREE, role=USER\n)
+activate DB
+
+alt Race condition — P2002 unique constraint
+  DB --> API : PrismaClientKnownRequestError P2002
+  deactivate DB
+  API --> UI : HTTP 409\n"Email sudah digunakan"
+end
+
+DB --> API : user baru
+deactivate DB
+
+API --> UI : HTTP 201\n"Registrasi berhasil"
+deactivate API
+
+UI -> UI : onSwitchToLogin()\n(arahkan ke form login)
+UI --> USER : notifikasi sukses\npindah ke halaman login
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-08: LOGOUT
+' ============================================================
+@startuml SEQ-08-Logout
+title Sequence Diagram — Logout\nPOST /api/logout
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "Frontend\n(React)" as UI
+participant "POST /api/logout\n(Route Handler)" as API
+participant "Supabase\nAuth Client" as SUPABASE
+
+USER -> UI : klik tombol Logout
+activate UI
+
+UI -> API : POST /api/logout\n[Cookie: token=...]
+activate API
+
+API -> SUPABASE : createClient()\nsupabase.auth.getUser()
+activate SUPABASE
+SUPABASE --> API : {data: {user}} | null
+deactivate SUPABASE
+
+alt Ada sesi Supabase aktif
+  API -> SUPABASE : supabase.auth.signOut\n({scope: 'global'})
+  activate SUPABASE
+  SUPABASE --> API : ok
+  deactivate SUPABASE
+end
+
+API -> API : Set-Cookie: token=""\n(expires: epoch 0)\nhapus JWT cookie
+
+API --> UI : HTTP 303 Redirect\nLocation: /login
+deactivate API
+
+UI -> UI : localStorage.removeItem("user")\nlocalStorage.removeItem("active_conversation_id")\nlocalStorage.removeItem("conversations")
+UI -> UI : dispatchEvent("auth-change")
+UI --> USER : redirect ke /login\nstate global ter-reset
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-09: GET PROFILE (termasuk self-healing PRO)
+' ============================================================
+@startuml SEQ-09-GetProfile
+title Sequence Diagram — Lihat Profil & Self-Healing\nGET /api/profile
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "Frontend\n(React)" as UI
+participant "GET /api/profile\n(Route Handler)" as API
+participant "verifyToken()\n(jsonwebtoken)" as JWT
+database "PostgreSQL\n(Prisma)" as DB
+participant "Midtrans\nCoreAPI" as MIDTRANS
+
+USER -> UI : buka halaman profil
+activate UI
+
+UI -> API : GET /api/profile\n[Cookie: token=...]
+activate API
+
+API -> API : cookies.get("token")
+
+alt Token tidak ada
+  API --> UI : HTTP 401 "Unauthorized"
+  UI --> USER : redirect ke login
+end
+
+API -> JWT : verifyToken(token)
+activate JWT
+JWT --> API : payload {userId}
+deactivate JWT
+
+API -> DB : user.findUnique(\n  {id: userId}\n  select: id,name,email,avatarUrl\n  tier,promptLimit,personalContext\n)
+activate DB
+DB --> API : user
+deactivate DB
+
+alt User tidak ditemukan
+  API --> UI : HTTP 404
+end
+
+note over API, MIDTRANS
+  Self-Healing: cek jika webhook Midtrans terlambat/gagal
+end note
+
+alt user.tier === "FREE"
+  API -> DB : transaction.findFirst(\n  {userId, status: "PENDING"}\n  orderBy: createdAt desc\n)
+  activate DB
+  DB --> API : pendingTx | null
+  deactivate DB
+
+  alt Ada transaksi PENDING
+    API -> MIDTRANS : CoreAPI.transaction\n.status(pendingTx.orderId)
+    activate MIDTRANS
+    MIDTRANS --> API : {transaction_status}
+    deactivate MIDTRANS
+
+    alt status = "settlement" atau "capture"
+      API -> DB : $transaction([\n  transaction.update({SUCCESS})\n  user.update({tier:PRO, promptLimit:0})\n])
+      activate DB
+      DB --> API : ok (atomic)
+      deactivate DB
+      API -> API : user.tier = "PRO"\nuser.promptLimit = 0
+    end
+  end
+end
+
+API --> UI : HTTP 200\n{id, name, email, avatarUrl\ntier, promptLimit, personalContext}
+deactivate API
+
+UI --> USER : tampil data profil\n(dengan badge PRO jika tier=PRO)
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-10: PATCH PROFILE (update data profil)
+' ============================================================
+@startuml SEQ-10-UpdateProfile
+title Sequence Diagram — Update Profil\nPATCH /api/profile
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "ProfileForm\n(React)" as UI
+participant "PATCH /api/profile\n(Route Handler)" as API
+participant "verifyToken()" as JWT
+database "PostgreSQL\n(Prisma)" as DB
+participant "bcryptjs" as BCRYPT
+
+USER -> UI : edit nama / email / password\n/ personalContext / avatarUrl
+activate UI
+
+UI -> API : PATCH /api/profile\n{name?, email?, currentPassword?\nnewPassword?, avatarUrl?, personalContext?}
+activate API
+
+API -> JWT : verifyToken(token cookie)
+activate JWT
+JWT --> API : payload {userId}
+deactivate JWT
+
+alt Token tidak ada / invalid
+  API --> UI : HTTP 401
+end
+
+API -> DB : user.findUnique({id: userId})
+activate DB
+DB --> API : existingUser
+deactivate DB
+
+alt User tidak ditemukan
+  API --> UI : HTTP 404
+end
+
+API -> API : susun updateData = {}
+note right of API
+  Hanya field yang dikirim yang diupdate.
+  Field tidak dikirim = tidak berubah.
+end note
+
+alt avatarUrl dikirim && bukan null && tidak diawali "http"
+  API --> UI : HTTP 400 "URL Avatar tidak valid"
+end
+
+alt newPassword dikirim
+  alt currentPassword tidak ada
+    API --> UI : HTTP 400 "Password lama wajib diisi"
+  end
+
+  API -> BCRYPT : compare(currentPassword, existingUser.passwordHash)
+  activate BCRYPT
+  BCRYPT --> API : isMatch: boolean
+  deactivate BCRYPT
+
+  alt Password lama salah
+    API --> UI : HTTP 401 "Password lama salah"
+  end
+
+  alt newPassword < 8 karakter
+    API --> UI : HTTP 400 "Password minimal 8 karakter"
+  end
+
+  API -> BCRYPT : hash(newPassword, saltRounds: 10)
+  activate BCRYPT
+  BCRYPT --> API : passwordHash baru
+  deactivate BCRYPT
+
+  API -> API : updateData.passwordHash = hash baru
+end
+
+alt personalContext dikirim && length > 500
+  API --> UI : HTTP 400 "Konteks personal maksimal 500 karakter"
+end
+
+alt updateData kosong (tidak ada field yang berubah)
+  API --> UI : HTTP 400 "Tidak ada perubahan data"
+end
+
+API -> DB : user.update(\n  {id: userId}\n  data: updateData\n  select: id,name,email,avatarUrl\n)
+activate DB
+DB --> API : updatedUser
+deactivate DB
+
+API --> UI : HTTP 200\n{message: "Profil berhasil diperbarui"\nuser: updatedUser}
+deactivate API
+
+UI --> USER : tampil notifikasi sukses\ndata profil diperbarui
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-11: DELETE PROFILE (hapus akun)
+' ============================================================
+@startuml SEQ-11-DeleteProfile
+title Sequence Diagram — Hapus Akun\nDELETE /api/profile
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "ProfileForm\n(React)" as UI
+participant "DELETE /api/profile\n(Route Handler)" as API
+participant "verifyToken()" as JWT
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : klik "Hapus Akun"\nkonfirmasi dialog
+activate UI
+
+UI -> API : DELETE /api/profile\n[Cookie: token=...]
+activate API
+
+API -> JWT : verifyToken(token cookie)
+activate JWT
+JWT --> API : payload {userId}
+deactivate JWT
+
+alt Token tidak ada / invalid
+  API --> UI : HTTP 401
+end
+
+API -> DB : user.delete({id: userId})
+note right of DB
+  Cascade delete otomatis (onDelete: Cascade):
+  - Chat (+ ChatHistory)
+  - Transaction
+  - PromptUsage (baru, 16 Okt 2026)
+  SearchLog.userId dan TrendingIssue.createdBy
+  bersifat opsional (nullable), tidak CASCADE.
+end note
+activate DB
+DB --> API : deleted user
+deactivate DB
+
+API -> API : Set-Cookie: token=""\n(expires: epoch 0)
+
+API --> UI : HTTP 200\n"Akun berhasil dihapus selamanya"
+deactivate API
+
+UI -> UI : localStorage.clear()\ndispatchEvent("auth-change")
+UI --> USER : redirect ke halaman utama
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-12: UPLOAD AVATAR
+' ============================================================
+@startuml SEQ-12-UploadAvatar
+title Sequence Diagram — Upload Foto Avatar\nPOST /api/profile/upload
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "ProfileForm\n(React)" as UI
+participant "POST /api/profile/upload\n(Route Handler)" as API
+participant "verifyToken()" as JWT
+participant "Supabase\nAdminClient\n(avatars bucket)" as SUPABASE
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : pilih gambar\n(jpg/png/webp, maks 2MB)
+activate UI
+
+UI -> API : POST FormData\n{file: imageFile}\n[Cookie: token=...]
+activate API
+
+API -> JWT : verifyToken(token cookie)
+activate JWT
+JWT --> API : payload {userId}
+deactivate JWT
+
+alt Token tidak ada / invalid
+  API --> UI : HTTP 401 "Sesi berakhir"
+end
+
+API -> API : formData.get("file")
+
+alt File tidak ada
+  API --> UI : HTTP 400 "File tidak ditemukan"
+end
+
+alt file.size > 2MB
+  API --> UI : HTTP 400 "Ukuran file maksimal 2MB"
+end
+
+API -> API : ambil ekstensi file\n(split(".").pop().toLowerCase())
+
+alt Ekstensi bukan jpg/jpeg/png/webp
+  API --> UI : HTTP 400 "Ekstensi file tidak valid"
+end
+
+alt MIME type bukan image/jpeg|png|webp
+  API --> UI : HTTP 400 "Format file tidak didukung"
+end
+
+API -> API : fileName = "{userId}.{ext}"\nkonversi file ke Buffer
+
+API -> SUPABASE : storage.from("avatars")\n.upload(fileName, buffer\n{contentType, upsert: true})
+activate SUPABASE
+
+alt Upload gagal
+  SUPABASE --> API : {error}
+  deactivate SUPABASE
+  API --> UI : HTTP 500 "Gagal mengunggah file"
+end
+
+SUPABASE --> API : {data: uploadData}
+deactivate SUPABASE
+
+API -> SUPABASE : storage.from("avatars")\n.getPublicUrl(fileName)
+activate SUPABASE
+SUPABASE --> API : publicUrl
+deactivate SUPABASE
+
+API -> API : publicUrl += "?t={Date.now()}"\n(cache-busting)
+
+API -> DB : user.update(\n  {id: userId}\n  data: {avatarUrl: publicUrl}\n)
+activate DB
+DB --> API : updatedUser
+deactivate DB
+
+API --> UI : HTTP 200\n{message: "Upload berhasil"\nurl: publicUrl, user: updatedUser}\n[Cache-Control: no-store]
+deactivate API
+
+UI --> USER : foto profil diperbarui
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-13: GET CHAT HISTORY
+' ============================================================
+@startuml SEQ-13-GetChat
+title Sequence Diagram — Ambil Riwayat Chat\nGET /api/chat
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "ChatArea\n(React)" as UI
+participant "GET /api/chat\n(Route Handler)" as API
+participant "getSession()\n(jose JWT)" as SESSION
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : buka halaman Chatbot\n/ pilih percakapan
+activate UI
+
+UI -> API : GET /api/chat\n?userId={id}&type=list\n[Cookie: token=...]
+activate API
+
+API -> SESSION : getSession()
+activate SESSION
+SESSION --> API : {userId} | null
+deactivate SESSION
+
+alt Tidak ada sesi || userId param != session.userId
+  API --> UI : HTTP 401 "Unauthorized"
+  UI --> USER : redirect ke login
+end
+
+alt type === "list"
+  API -> DB : chat.findMany(\n  {where: {userId}}\n  orderBy: {updatedAt: desc}\n)
+  activate DB
+  DB --> API : chats[]
+  deactivate DB
+  API --> UI : HTTP 200 {chats}
+
+else chatId ada di query param
+  API -> DB : chatHistory.findMany(\n  {where: {chatId}}\n  orderBy: {createdAt: asc}\n)
+  activate DB
+  DB --> API : messages[]
+  deactivate DB
+  API --> UI : HTTP 200 {history: messages}
+
+else fallback (legacy)
+  API -> DB : chatHistory.findMany(\n  {where: {userId}}\n  orderBy: {createdAt: asc}\n)
+  activate DB
+  DB --> API : allHistory[]
+  deactivate DB
+  API --> UI : HTTP 200 {history: allHistory}
+end
+
+deactivate API
+UI --> USER : tampil daftar chat\n/ pesan dalam chat
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-14: PATCH CHAT (rename judul)
+' ============================================================
+@startuml SEQ-14-RenameChat
+title Sequence Diagram — Rename Judul Chat\nPATCH /api/chat
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "ChatSidebar\n(React)" as UI
+participant "PATCH /api/chat\n(Route Handler)" as API
+participant "getSession()" as SESSION
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : klik rename chat\nketik judul baru
+activate UI
+
+UI -> API : PATCH /api/chat\n{chatId, title}\n[Cookie: token=...]
+activate API
+
+API -> SESSION : getSession()
+activate SESSION
+SESSION --> API : {userId} | null
+deactivate SESSION
+
+alt Tidak ada sesi
+  API --> UI : HTTP 401 "Unauthorized"
+end
+
+alt chatId atau title tidak ada
+  API --> UI : HTTP 400 "Data tidak lengkap"
+end
+
+API -> DB : chat.findUnique({id: chatId})
+activate DB
+DB --> API : chat | null
+deactivate DB
+
+alt chat tidak ditemukan || chat.userId !== session.userId
+  API --> UI : HTTP 403 "Forbidden"
+  UI --> USER : tampil pesan error
+end
+
+API -> DB : chat.update(\n  {id: chatId}\n  data: {title}\n)
+activate DB
+DB --> API : updatedChat
+deactivate DB
+
+API --> UI : HTTP 200\n{success: true, chat: updatedChat}
+deactivate API
+
+UI -> UI : update judul di sidebar
+UI --> USER : judul chat berubah
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-15: DELETE CHAT
+' ============================================================
+@startuml SEQ-15-DeleteChat
+title Sequence Diagram — Hapus Chat\nDELETE /api/chat
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "ChatSidebar\n(React)" as UI
+participant "DELETE /api/chat\n(Route Handler)" as API
+participant "getSession()" as SESSION
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : klik hapus chat\nkonfirmasi
+activate UI
+
+UI -> API : DELETE /api/chat\n?chatId={id}\n[Cookie: token=...]
+activate API
+
+API -> SESSION : getSession()
+activate SESSION
+SESSION --> API : {userId} | null
+deactivate SESSION
+
+alt Tidak ada sesi
+  API --> UI : HTTP 401
+end
+
+alt chatId tidak ada di query param
+  API --> UI : HTTP 400 "ID Chat diperlukan"
+end
+
+API -> DB : chat.findUnique({id: chatId})
+activate DB
+DB --> API : chat | null
+deactivate DB
+
+alt chat tidak ditemukan || chat.userId !== session.userId
+  API --> UI : HTTP 403 "Forbidden"
+end
+
+API -> DB : chat.delete({id: chatId})
+note right of DB
+  Cascade delete: ChatHistory terhapus otomatis.
+  PromptUsage TIDAK ikut terhapus (tabel terpisah)
+  -> kuota harian pengguna tidak kembali.
+end note
+activate DB
+DB --> API : ok
+deactivate DB
+
+API --> UI : HTTP 200 {success: true}
+deactivate API
+
+UI -> UI : hapus chat dari sidebar\nreset active chat
+UI --> USER : chat terhapus
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-16: GET REGULATIONS (list + search + filter)
+' ============================================================
+@startuml SEQ-16-GetRegulations
+title Sequence Diagram — Cari & Filter Regulasi\nGET /api/regulations
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "DataPage\n(React)" as UI
+participant "GET /api/regulations\n(Route Handler)" as API
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : buka Pusat Data Hukum\n(ketik keyword / pilih kategori)
+activate UI
+
+UI -> API : GET /api/regulations\n?page=1&limit=10&search=xxx\n&category=xxx&sortBy=title
+activate API
+
+API -> API : sanitasi parameter:\npage = Math.max(1, parseInt||1)\nlimit = Math.min(100, Math.max(1,...))\nsearch = trim || ""\ncategory = "" | "Semua" | specific
+
+alt Ada parameter search
+  API -> DB : searchLog.create(\n  {query: search, userId?}\n)\n[async fire-and-forget — tidak ditunggu]
+  note right of DB
+    Non-blocking: response tidak\nmenunggu log tersimpan
+  end note
+end
+
+API -> API : susun whereClause:\n{isActive: true\nOR(title ILIKE, desc ILIKE) jika search\ncategory jika bukan "Semua"}
+
+API -> DB : Promise.all([\n  regulation.findMany(\n    {where, skip, take, orderBy}\n    select: id,title,desc,category\n    fileSize,fileUrl,viewCount\n  )\n  regulation.count({where})\n])
+activate DB
+DB --> API : [regulations[], totalCount]
+deactivate DB
+
+API -> API : totalPages = ceil(total/limit)
+
+API --> UI : HTTP 200\n{data: regulations[]\nmeta: {totalData, currentPage\ndataPerPage, totalPages}}
+deactivate API
+
+UI --> USER : tampil daftar regulasi\ndengan pagination
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-17: GET REGULATION DETAIL (+ viewCount)
+' ============================================================
+@startuml SEQ-17-RegulationDetail
+title Sequence Diagram — Detail Regulasi\nGET /api/regulations/[id]
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "DataDetailPage\n(React)" as UI
+participant "GET /api/regulations/[id]\n(Route Handler)" as API
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : klik dokumen regulasi
+activate UI
+
+UI -> API : GET /api/regulations/{id}
+activate API
+
+alt id tidak ada
+  API --> UI : HTTP 400 "ID wajib disertakan"
+end
+
+API -> DB : regulation.findUnique({id})
+activate DB
+DB --> API : regulation | null
+deactivate DB
+
+alt Regulasi tidak ditemukan
+  API --> UI : HTTP 404 "Data hukum tidak ditemukan"
+end
+
+API -> DB : regulation.update(\n  {id}\n  data: {viewCount: {increment: 1}}\n)\n[fire-and-forget — tidak ditunggu]
+note right of DB
+  Non-blocking: response tidak\nmenunggu update viewCount
+end note
+
+API --> UI : HTTP 200\n{data: regulation\nmessage: "Berhasil mengambil detail"}
+deactivate API
+
+UI --> USER : tampil detail dokumen\n(judul, deskripsi, kategori\nfile URL, viewCount)
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-18: DOWNLOAD PDF (proxy server)
+' ============================================================
+@startuml SEQ-18-DownloadPDF
+title Sequence Diagram — Download Dokumen PDF\nGET /api/regulations/download
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "DataPage\n(React)" as UI
+participant "GET /api/regulations/download\n(Route Handler — Proxy)" as API
+participant "Supabase Storage\n(legal-documents)" as SUPABASE
+
+USER -> UI : klik tombol Unduh
+activate UI
+
+UI -> API : GET /api/regulations/download\n?url={supabaseUrl}&name={fileName}
+activate API
+
+alt Parameter url tidak ada
+  API --> UI : HTTP 400 "URL file tidak ditemukan"
+end
+
+API -> API : new URL(fileUrl)\nvalidasi hostname
+
+alt URL tidak bisa di-parse
+  API --> UI : HTTP 400 "URL tidak valid"
+end
+
+alt hostname bukan "supabase.co" &&\ntidak endsWith ".supabase.co"
+  API --> UI : HTTP 400 "URL tidak diizinkan"\n(SSRF diblokir)
+  UI --> USER : tampil error
+end
+
+API -> SUPABASE : fetch(fileUrl\n  {headers: {Accept: "application/pdf,*/*"}})\n[server-side, bypass CORS browser]
+activate SUPABASE
+
+alt File tidak ditemukan di storage
+  SUPABASE --> API : HTTP 404
+  deactivate SUPABASE
+  API --> UI : HTTP 404 "Dokumen tidak ditemukan"
+end
+
+SUPABASE --> API : stream PDF
+deactivate SUPABASE
+
+API -> API : buffer = await arrayBuffer()\nsafeFileName = fileName\n  .replace(/[^a-zA-Z0-9._\\- ]/g, "_")
+
+API --> UI : HTTP 200\nContent-Type: application/pdf\nContent-Disposition: attachment; filename="{safeFileName}"\nContent-Length: {size}\nCache-Control: no-store\n[binary PDF buffer]
+deactivate API
+
+UI --> USER : browser otomatis\ndownload file PDF
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-19: DASHBOARD (statistik + cache)
+' ============================================================
+@startuml SEQ-19-Dashboard
+title Sequence Diagram — Dashboard Statistik\nGET /api/dashboard
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Pengguna" as USER
+participant "DashboardPage\n(React)" as UI
+participant "GET /api/dashboard\n(Route Handler)" as API
+participant "getSession()\n(jose JWT)" as SESSION
+participant "In-Memory Cache\n(TTL 30 detik)" as CACHE
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : buka halaman Dashboard
+activate UI
+
+UI -> API : GET /api/dashboard\n[Cookie: token=...]
+activate API
+
+API -> SESSION : getSession()
+activate SESSION
+SESSION --> API : session | null
+deactivate SESSION
+
+alt Tidak ada sesi
+  API --> UI : HTTP 401
+end
+
+API -> CACHE : cek cache.data && Date.now() < expiresAt
+activate CACHE
+
+alt Cache masih valid (< 30 detik)
+  CACHE --> API : cached responseData
+  deactivate CACHE
+  API --> UI : HTTP 200\n[dari cache, sangat cepat]
+  UI --> USER : tampil dashboard
+end
+
+deactivate CACHE
+note over API, DB
+  Cache miss — ambil dari database
+end note
+
+API -> API : hitung batas waktu WIB:\ntodayStart & todayEnd\n(+07:00 timezone)
+
+API -> DB : Promise.all(6 query paralel):\n1. user.count()\n2. chatHistory.count(hari ini)\n3. regulation.count()\n4. searchLog.count(hari ini)\n5. regulation.findMany(top 10 viewCount)\n6. trendingIssue.findMany(3 terbaru)
+activate DB
+DB --> API : [totalUsers, interactions\nregulations, searches\npopularDocs, trendingIssues]
+deactivate DB
+
+API -> DB : searchLog.groupBy(\n  {by: ['createdAt']}\n  _count: {id: true}\n  orderBy: {createdAt: asc}\n  take: 30\n)
+activate DB
+DB --> API : searchTrendsRaw[]
+deactivate DB
+
+API -> API : proses searchTrends:\ngroupBy date (YYYY-MM-DD)\nkonversi ke [{date, searches}]
+
+API -> API : format popularDocs:\n{name: title, views: viewCount\ncategory, fileUrl, description}
+
+API -> API : susun responseData
+API -> CACHE : cache.data = responseData\ncache.expiresAt = now + 30.000ms
+activate CACHE
+CACHE --> API : ok
+deactivate CACHE
+
+API --> UI : HTTP 200 {success: true\ndata: {summary, dokumen_terpopuler\nisu_terkini, tren_pencarian}}\n[Cache-Control: no-store]
+deactivate API
+
+UI --> USER : tampil statistik, grafik\ndokumen populer, isu terkini
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-20: ADMIN — MANAJEMEN USER (GET, PATCH, DELETE)
+' ============================================================
+@startuml SEQ-20-AdminUsers
+title Sequence Diagram — Admin Manajemen Pengguna\nGET / PATCH / DELETE /api/admin/users
+
+skinparam sequence {
+  ActorBackgroundColor #FFF3E0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Admin" as ADMIN
+participant "Admin Panel\n(React)" as UI
+participant "middleware.js\n(JWT + ADMIN)" as MW
+participant "GET|PATCH|DELETE\n/api/admin/users" as API
+database "PostgreSQL\n(Prisma)" as DB
+
+ADMIN -> UI : buka halaman Manajemen Pengguna
+activate UI
+
+== GET — Daftar Semua User ==
+
+UI -> MW : GET /api/admin/users\n[Cookie: token=admin_jwt]
+activate MW
+MW -> MW : jwtVerify + role===ADMIN
+alt Tidak authorized
+  MW --> UI : HTTP 401/403
+end
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> API : hitung today (00:00 WIB)
+
+API -> DB : user.findMany(\n  select: id,name,email,role,tier\n  promptLimit,createdAt\n  _count: {promptUsages hari ini} <<diperbaiki>>\n  messages: {take:1, desc createdAt}\n  orderBy: {createdAt: desc}\n)
+note right of DB
+  Perbaikan (BUG-06): sisa kuota dihitung dari
+  PromptUsage, BUKAN dari count ChatHistory
+  (sebelumnya salah hitung jika riwayat dihapus).
+end note
+activate DB
+DB --> API : users[] dengan lastActive\n& remainingQuota = promptLimit - promptUsages
+deactivate DB
+
+API --> UI : HTTP 200 [users[] dengan remainingQuota]
+deactivate API
+
+UI --> ADMIN : tampil tabel semua user
+
+== PATCH — Update Tier / Role / Limit User ==
+
+ADMIN -> UI : klik edit user\nubah tier/role/promptLimit
+activate UI
+
+UI -> MW : PATCH /api/admin/users/{id}\n{tier?, role?, promptLimit?}
+activate MW
+MW --> API : teruskan (sudah terverifikasi)
+deactivate MW
+activate API
+
+API -> DB : user.update(\n  {id}\n  data: {tier?, role?, promptLimit?}\n)
+activate DB
+DB --> API : updatedUser
+deactivate DB
+
+API --> UI : HTTP 200 {user: updatedUser}
+deactivate API
+UI --> ADMIN : data user diperbarui
+
+== DELETE — Hapus User ==
+
+ADMIN -> UI : klik hapus user\nkonfirmasi
+activate UI
+
+UI -> MW : DELETE /api/admin/users/{id}
+activate MW
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> DB : user.delete({id})\n[cascade semua data user]
+activate DB
+DB --> API : ok
+deactivate DB
+
+API --> UI : HTTP 200 {message: "User dihapus"}
+deactivate API
+UI --> ADMIN : user hilang dari tabel
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-21: ADMIN — MANAJEMEN REGULASI (POST/PATCH/DELETE)
+' ============================================================
+@startuml SEQ-21-AdminRegulations
+title Sequence Diagram — Admin Manajemen Regulasi\nPOST / PATCH / DELETE /api/admin/regulations
+
+skinparam sequence {
+  ActorBackgroundColor #FFF3E0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Admin" as ADMIN
+participant "Admin Panel\n(React)" as UI
+participant "middleware.js\n(JWT + ADMIN)" as MW
+participant "/api/admin\n/regulations[/id]" as API
+participant "Supabase\nStorage" as SUPABASE
+database "PostgreSQL\n(Prisma)" as DB
+
+== Langkah 1 — Upload File PDF ke Storage ==
+
+ADMIN -> UI : pilih file PDF + isi metadata
+activate UI
+
+UI -> MW : POST /api/admin/regulations/upload\nFormData {file}
+activate MW
+MW -> MW : jwtVerify + role===ADMIN
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> API : validasi file.type === "application/pdf"
+
+API -> SUPABASE : storage.listBuckets()\ncek bucket "legal-documents"
+activate SUPABASE
+SUPABASE --> API : buckets[]
+deactivate SUPABASE
+
+alt Bucket belum ada
+  API -> SUPABASE : storage.createBucket(\n  "legal-documents", {public: true}\n)
+  activate SUPABASE
+  SUPABASE --> API : ok
+  deactivate SUPABASE
+end
+
+API -> SUPABASE : storage.from("legal-documents")\n.upload("{Date.now()}_{safeFileName}", buffer\n{upsert: false})
+activate SUPABASE
+SUPABASE --> API : {data} | {error}
+deactivate SUPABASE
+
+API -> SUPABASE : storage.getPublicUrl(uniqueFileName)
+activate SUPABASE
+SUPABASE --> API : publicUrl
+deactivate SUPABASE
+
+API --> UI : HTTP 200\n{fileUrl, fileName, fileSize}
+deactivate API
+
+== Langkah 2 — Simpan Metadata ke Database ==
+
+UI -> MW : POST /api/admin/regulations\n{title, description, fileUrl\ncategory, fileSize, fileName}
+activate MW
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> API : validasi title && fileUrl wajib ada
+
+API -> DB : regulation.create({\n  title, description, fileUrl\n  category, fileSize, fileName\n  isActive: true\n})
+activate DB
+DB --> API : regulation baru
+deactivate DB
+
+API --> UI : HTTP 201 {regulation}
+deactivate API
+UI --> ADMIN : regulasi muncul di daftar
+
+== PATCH — Edit Regulasi ==
+
+ADMIN -> UI : klik edit regulasi
+activate UI
+
+UI -> MW : PATCH /api/admin/regulations/{id}\n{title?, category?, isActive?}
+activate MW
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> DB : regulation.update({id}, data)
+activate DB
+DB --> API : updatedRegulation
+deactivate DB
+
+API --> UI : HTTP 200 {regulation: updated}
+deactivate API
+
+== DELETE — Hapus Regulasi ==
+
+ADMIN -> UI : klik hapus regulasi
+activate UI
+
+UI -> MW : DELETE /api/admin/regulations/{id}
+activate MW
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> DB : regulation.delete({id})
+activate DB
+DB --> API : ok
+deactivate DB
+
+API --> UI : HTTP 200 {message: "Regulasi dihapus"}
+deactivate API
+UI --> ADMIN : regulasi hilang dari daftar
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-22: ADMIN — MANAJEMEN ISU TERKINI
+' ============================================================
+@startuml SEQ-22-AdminTrending
+title Sequence Diagram — Admin Manajemen Isu Terkini\nGET / POST / PATCH / DELETE /api/admin/trending
+
+skinparam sequence {
+  ActorBackgroundColor #FFF3E0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Admin" as ADMIN
+participant "Admin Panel\n(React)" as UI
+participant "middleware.js\n(JWT + ADMIN)" as MW
+participant "/api/admin\n/trending[/id]" as API
+database "PostgreSQL\n(Prisma)" as DB
+
+ADMIN -> UI : buka halaman Isu Terkini
+activate UI
+
+== GET — Daftar Isu Terkini ==
+
+UI -> MW : GET /api/admin/trending
+activate MW
+MW --> API : teruskan (sudah verified ADMIN)
+deactivate MW
+activate API
+
+API -> DB : trendingIssue.findMany(\n  orderBy: {publishDate: desc}\n)
+activate DB
+DB --> API : issues[]
+deactivate DB
+
+API --> UI : HTTP 200 {data: issues[]}
+deactivate API
+UI --> ADMIN : tampil daftar isu
+
+== POST — Tambah Isu Baru ==
+
+ADMIN -> UI : klik Tambah Isu\nisi form (title, description\npublishDate, newsLink, location)
+activate UI
+
+UI -> MW : POST /api/admin/trending\n{title, description, publishDate\nnewsLink?, location?}
+activate MW
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> DB : trendingIssue.create({\n  title, description\n  publishDate, newsLink\n  location, isActive: true\n})
+activate DB
+DB --> API : issue baru
+deactivate DB
+
+API --> UI : HTTP 201 {issue}
+deactivate API
+UI --> ADMIN : isu baru muncul di daftar
+
+== PATCH — Edit Isu ==
+
+ADMIN -> UI : klik edit isu
+activate UI
+
+UI -> MW : PATCH /api/admin/trending/{id}\n{field yang diubah}
+activate MW
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> DB : trendingIssue.update({id}, data)
+activate DB
+DB --> API : updatedIssue
+deactivate DB
+
+API --> UI : HTTP 200 {issue: updated}
+deactivate API
+
+== DELETE — Hapus Isu ==
+
+ADMIN -> UI : klik hapus isu
+activate UI
+
+UI -> MW : DELETE /api/admin/trending/{id}
+activate MW
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> DB : trendingIssue.delete({id})
+activate DB
+DB --> API : ok
+deactivate DB
+
+API --> UI : HTTP 200 {message: "Isu dihapus"}
+deactivate API
+UI --> ADMIN : isu hilang dari daftar
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-23: ADMIN — DASHBOARD ANALITIK
+' ============================================================
+@startuml SEQ-23-AdminDashboard
+title Sequence Diagram — Admin Dashboard Analitik\nGET /api/admin/dashboard/stats
+
+skinparam sequence {
+  ActorBackgroundColor #FFF3E0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+}
+
+actor "Admin" as ADMIN
+participant "Admin Panel\n(React)" as UI
+participant "middleware.js\n(JWT + ADMIN)" as MW
+participant "GET /api/admin\n/dashboard/stats" as API
+database "PostgreSQL\n(Prisma)" as DB
+
+ADMIN -> UI : buka Admin Dashboard
+activate UI
+
+UI -> MW : GET /api/admin/dashboard/stats\n[Cookie: token=admin_jwt]
+activate MW
+MW -> MW : jwtVerify + role===ADMIN
+alt Tidak authorized
+  MW --> UI : HTTP 401/403
+end
+MW --> API : teruskan
+deactivate MW
+activate API
+
+API -> API : hitung rentang waktu:\ntodayStart, weekAgo, prevWeekStart
+
+API -> DB : Promise.all(20 query paralel):\n1. user.count() — total user\n2. user.count({role:ADMIN})\n3. user.count({tier:PRO})\n4. user.count({tier:FREE})\n5. regulation.count()\n6. regulation.aggregate(sum viewCount)\n7. chatHistory.count()\n8. user.count({createdAt ≥ weekAgo})\n9. user.count({prevWeek})\n10. regulation.count({weekAgo})\n11. regulation.count({prevWeek})\n12. chatHistory.count({hari ini, role=USER})\n13. regulation.aggregate(sum fileSize)\n14. regulation.findMany(top 5 viewCount)\n15. regulation.findMany(5 terbaru)\n16. trendingIssue.findMany(5 terbaru)\n17. searchLog.groupBy(createdAt)\n18. regulation.groupBy(category)\n19. chatHistory.findMany(userId distinct, hari ini)
+activate DB
+DB --> API : semua hasil paralel
+deactivate DB
+
+API -> API : hitung growth %:\ncalcGrowth = ((curr-prev)/prev)*100\nformat: "+12%" atau "-5%"
+
+API -> API : proses searchTrends:\ngroupBy date string\nambil 30 hari terakhir
+
+API -> API : proses categoryDistribution:\nsort by count DESC
+
+API -> API : susun response:\n{cards, popularDocs, recentDocs\ntrendingIssues, searchTrends\ncategoryDistribution, userDistribution}
+
+API --> UI : HTTP 200 {success: true\ndata: {...}}
+deactivate API
+
+UI --> ADMIN : tampil dashboard:\n- Cards (total, growth)\n- Grafik tren pencarian\n- Distribusi kategori\n- User PRO vs FREE\n- Dokumen populer & terbaru
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-24: HAPUS SEMUA RIWAYAT CHAT (BARU — 16 Okt 2026)
+' ============================================================
+@startuml SEQ-24-DeleteAllHistory
+title Sequence Diagram — Hapus Semua Riwayat Chat\nDELETE /api/chat/history
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+  BoxBackgroundColor #F8F9FA
+}
+
+actor "Pengguna" as USER
+participant "ProfileModal\n(Tab Akun)" as UI
+participant "DELETE /api/chat/history\n(Route Handler)" as API
+participant "getSession() +\nrateLimit (LRU)" as SESSION
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : buka Profil > Akun\nklik "Hapus Semua Riwayat"
+activate UI
+UI -> UI : tampil dialog langkah 1\n(penjelasan konsekuensi)
+USER -> UI : klik "Lanjutkan"
+UI -> UI : tampil dialog langkah 2\n(ketik "HAPUS")
+USER -> UI : ketik HAPUS, klik konfirmasi
+
+UI -> API : DELETE /api/chat/history\n{confirm: "HAPUS"}\n[Cookie: token=...]
+activate API
+
+API -> SESSION : getSession()
+activate SESSION
+SESSION --> API : {userId} | null
+deactivate SESSION
+
+alt Tidak ada sesi
+  API --> UI : HTTP 401
+  UI --> USER : redirect ke login
+end
+
+API -> SESSION : rateLimit(userId, 3, "chat-delete-all")
+activate SESSION
+SESSION --> API : allowed / blocked
+deactivate SESSION
+
+alt Rate limit tercapai (>3x/menit)
+  API --> UI : HTTP 429
+  UI --> USER : tampil pesan error
+end
+
+API -> API : cek body.confirm === "HAPUS"
+
+alt Konfirmasi tidak valid
+  API --> UI : HTTP 400\n"Konfirmasi tidak valid."
+  UI --> USER : tampil pesan error
+end
+
+API -> DB : chat.deleteMany({where: {userId}})
+note right of DB
+  Cascade delete: seluruh ChatHistory
+  ikut terhapus otomatis.
+  PromptUsage TIDAK ikut terhapus
+  -> kuota harian TIDAK kembali/reset.
+  Profil, langganan, dan akun tetap aman.
+end note
+activate DB
+DB --> API : {count: deletedChats}
+deactivate DB
+
+API --> UI : HTTP 200\n{success: true, deletedChats}
+deactivate API
+
+UI -> UI : kosongkan sidebar riwayat\ntampil "N percakapan telah dihapus"
+UI --> USER : konfirmasi selesai
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-25: STOP JAWABAN AI (BARU — 16 Okt 2026)
+' ============================================================
+@startuml SEQ-25-StopStream
+title Sequence Diagram — Hentikan Jawaban AI (Tombol Stop)\nPOST /api/chat {stream:true} — pembatalan oleh klien
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+  BoxBackgroundColor #F8F9FA
+}
+
+actor "Pengguna" as USER
+participant "ChatArea\n(React)" as UI
+participant "ReadableStream\n(fetch response.body)" as STREAM
+participant "POST /api/chat\n(streamChatResponse)" as API
+participant "AbortController" as ABORT
+participant "Gemini / Groq\n(LLM sedang stream)" as LLM
+database "PostgreSQL\n(Prisma)" as DB
+
+USER -> UI : AI sedang menulis jawaban\n(tombol Kirim berubah jadi Stop)
+activate UI
+
+USER -> UI : klik tombol Stop
+UI -> STREAM : reader.cancel()
+activate STREAM
+STREAM -> API : ReadableStream.cancel() dipanggil
+activate API
+
+API -> API : cancelled = true
+API -> ABORT : abortController.abort()
+activate ABORT
+ABORT -> LLM : hentikan request HTTP\n(fetch/stream LLM diputus)
+deactivate ABORT
+LLM --> API : AbortError (ditangkap, bukan error ke user)
+deactivate LLM
+
+alt Jawaban belum sempat ditulis (writing === false)
+  API -> API : return — tidak ada apapun\nyang disimpan/dicatat
+else Jawaban sudah sempat ditulis sebagian
+  API -> DB : promptUsage.create({userId})
+  activate DB
+  DB --> API : tercatat
+  deactivate DB
+  note right of DB
+    Kuota TETAP terpakai walau Stop ditekan,
+    agar Stop tidak dipakai untuk bertanya
+    tanpa batas. Tetapi chatHistory.create
+    TIDAK dipanggil -> riwayat tidak tersimpan.
+  end note
+end
+
+API -> API : controller.close()
+deactivate API
+STREAM --> UI : stream ditutup
+deactivate STREAM
+
+UI -> UI : tandai pesan "Dihentikan - tidak disimpan"\nteks sebagian tetap tampil di layar\ntampilkan tombol Edit pada pertanyaan
+UI --> USER : jawaban berhenti, bisa Edit & kirim ulang
+deactivate UI
+
+@enduml
+
+' ============================================================
+' SEQ-26: RESOLVE SITASI DOKUMEN (BARU — opsional)
+' ============================================================
+@startuml SEQ-26-ResolveCitation
+title Sequence Diagram — Buka Sumber Sitasi\nGET /api/regulations/resolve
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+  BoxBackgroundColor #F8F9FA
+}
+
+actor "Pengguna" as USER
+participant "ChatArea\n(render sitasi)" as UI
+participant "GET /api/regulations/resolve\n(Route Handler)" as API
+participant "rateLimit\n(LRU Cache)" as RL
+database "PostgreSQL\n(Prisma)" as DB
+
+UI -> UI : jawaban AI selesai, parsing teks\nmenemukan pola "(Sumber: <judul>, Hal: n)"
+activate UI
+USER -> UI : klik salah satu nomor sitasi
+
+UI -> API : GET /api/regulations/resolve\n?title=<judul1>&title=<judul2>...
+activate API
+
+API -> RL : rateLimit(ip, 60, "regulation-resolve")
+activate RL
+RL --> API : allowed / blocked
+deactivate RL
+
+alt Rate limit tercapai
+  API --> UI : HTTP 429
+end
+
+API -> API : trim, batasi 300 karakter/judul\nbuang duplikat, maks 20 judul
+
+API -> DB : regulation.findMany\n(cocok persis ATAU akhiran "- <judul>"\nisActive=true, fileUrl http/https)
+activate DB
+DB --> API : regulation[] {id, fileUrl}
+deactivate DB
+
+API --> UI : HTTP 200\n{data: {"<judul lowercase>": {id, fileUrl}}}\nCache-Control: private, max-age=300
+deactivate API
+
+UI -> UI : buka dokumen di tab baru\n(Pusat Data Hukum / unduhan langsung)
+UI --> USER : dokumen sumber terbuka
+deactivate UI
+
+@enduml

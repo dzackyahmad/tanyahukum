@@ -1,0 +1,726 @@
+'==============================================================
+' DATA FLOW DIAGRAM (DFD) — SISTEM TANYAHUKUM
+' Level 0 (Context), Level 1, Level 2
+' Tool: PlantUML
+'==============================================================
+
+' ============================================================
+' DFD LEVEL 0 — CONTEXT DIAGRAM
+' Sistem sebagai satu kotak hitam
+' ============================================================
+@startuml DFD-00-Context
+title DFD Level 0 — Context Diagram\nSistem TanyaHukum
+
+skinparam rectangle {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+}
+skinparam component {
+  BackgroundColor #EAF2FF
+  BorderColor #2f6fed
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 10
+
+' External Entities
+rectangle "Pengguna\n(User)" as USER
+rectangle "Admin" as ADMIN
+rectangle "Google OAuth\nServer" as GOOGLE
+rectangle "Midtrans\nPayment Gateway" as MIDTRANS
+rectangle "Nodemailer\n(Email Service)" as EMAIL
+
+' System
+component "SISTEM\nTANYAHUKUM" as SYSTEM #EEF4FF
+
+' External AI/DB Services
+rectangle "VoyageAI\n(Embedding)" as VOYAGE
+rectangle "Pinecone\n(Vector DB)" as PINECONE
+rectangle "Gemini API\n(3.5 Flash-Lite, 3.6 Flash\n3.5 Flash)" as GEMINI
+rectangle "Groq API\n(GPT-OSS 120B, Qwen 3.8)" as GROQ
+rectangle "Supabase\nStorage" as SUPABASE
+
+' User ↔ System
+USER --> SYSTEM : pertanyaan hukum + mode/model\n+ preferensi gaya jawaban, credential\ndata profil, keyword pencarian\nperintah Stop / hapus semua riwayat
+SYSTEM --> USER : stream jawaban AI + proses\ndaftar regulasi, data profil, token JWT\ndokumen Privasi/Ketentuan
+
+' Admin ↔ System
+ADMIN --> SYSTEM : data regulasi, data isu terkini\nmanajemen user
+SYSTEM --> ADMIN : statistik platform\nlog pencarian, daftar user
+
+' System ↔ External Services
+SYSTEM --> GOOGLE : credential token
+GOOGLE --> SYSTEM : payload user (email, name, picture)
+
+SYSTEM --> MIDTRANS : data transaksi\n(orderId, amount, email)
+MIDTRANS --> SYSTEM : Snap token, webhook notifikasi\nstatus pembayaran
+
+SYSTEM --> EMAIL : reset URL, email user
+EMAIL --> USER : email reset password
+
+SYSTEM --> VOYAGE : teks query
+VOYAGE --> SYSTEM : vector embedding (float[])
+
+SYSTEM --> PINECONE : query vector
+PINECONE --> SYSTEM : top-50 dokumen relevan\n+ metadata
+
+SYSTEM --> GEMINI : system prompt + pertanyaan\n(model sesuai mode dipilih)
+GEMINI --> SYSTEM : stream jawaban hukum (Markdown)
+
+SYSTEM --> GROQ : system prompt (20 potongan)\n+ pertanyaan (model sesuai mode)
+GROQ --> SYSTEM : stream jawaban hukum\n(fallback ke Gemini bila gagal)
+
+SYSTEM --> SUPABASE : file PDF / gambar avatar
+SUPABASE --> SYSTEM : public URL file
+
+@enduml
+
+' ============================================================
+' DFD LEVEL 1 — PROSES UTAMA
+' Breakdown 6 proses utama sistem
+' ============================================================
+@startuml DFD-01-Level1
+title DFD Level 1 — Proses Utama Sistem TanyaHukum
+
+skinparam rectangle {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+}
+skinparam usecase {
+  BackgroundColor #EAF2FF
+  BorderColor #2f6fed
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+
+' ── External Entities ─────────────────────────────────────
+rectangle "Pengguna" as USER
+rectangle "Admin" as ADMIN
+rectangle "Google OAuth" as GOOGLE
+rectangle "Midtrans" as MIDTRANS
+rectangle "VoyageAI + Pinecone\n+ LLM (Gemini/Groq)" as AISERVICES
+rectangle "Supabase Storage" as SUPABASE
+rectangle "Email Service" as EMAIL
+
+' ── Processes ─────────────────────────────────────────────
+usecase "1.0\nManajemen\nAutentikasi" as P1
+usecase "2.0\nManajemen\nProfil" as P2
+usecase "3.0\nChatbot AI\n(RAG Pipeline, streaming)" as P3
+usecase "4.0\nPusat Data\nHukum" as P4
+usecase "5.0\nManajemen\nPembayaran" as P5
+usecase "6.0\nAdmin\nPanel" as P6
+
+' ── Data Stores ───────────────────────────────────────────
+database "DS1\nUser" as DS_USER
+database "DS2\nChat &\nChatHistory" as DS_CHAT
+database "DS3\nRegulation" as DS_REG
+database "DS4\nTransaction" as DS_TRX
+database "DS5\nSearchLog" as DS_SEARCH
+database "DS6\nTrendingIssue" as DS_TREND
+database "DS7\nPromptUsage\n(baru)" as DS_USAGE
+
+' ── Flows: User → Proses ──────────────────────────────────
+USER --> P1 : credential\n(email, password)
+USER --> P2 : data profil baru\navatar file
+USER --> P3 : pertanyaan hukum\nchatId
+USER --> P4 : keyword pencarian\nfilter kategori
+USER --> P5 : userId\n(request upgrade PRO)
+
+' ── Flows: Proses → User ──────────────────────────────────
+P1 --> USER : JWT cookie\ndata user
+P2 --> USER : data profil\nURL avatar
+P3 --> USER : jawaban AI + sumber
+P4 --> USER : daftar regulasi\nbuffer PDF download
+P5 --> USER : Snap token\nstatus upgrade
+
+' ── Flows: Admin ──────────────────────────────────────────
+ADMIN --> P6 : data regulasi\ndata user\nisu terkini
+P6 --> ADMIN : statistik platform\nlog pencarian
+
+' ── Flows: External Services ──────────────────────────────
+P1 --> GOOGLE : credential token
+GOOGLE --> P1 : payload Google
+
+MIDTRANS --> P5 : webhook notifikasi
+P5 --> MIDTRANS : parameter transaksi
+
+P3 --> AISERVICES : query text
+AISERVICES --> P3 : vektor + dokumen + jawaban
+
+P2 --> SUPABASE : file avatar
+SUPABASE --> P2 : public URL avatar
+P6 --> SUPABASE : file PDF regulasi
+SUPABASE --> P6 : public URL PDF
+
+P1 --> EMAIL : reset URL + email
+EMAIL --> USER : email reset password
+
+' ── Flows: Proses ↔ Data Stores ──────────────────────────
+P1 --> DS_USER : simpan user baru\nupdate resetToken
+DS_USER --> P1 : data user (hash, tier, role)
+
+P2 --> DS_USER : update profil\nhapus akun
+DS_USER --> P2 : data profil
+
+P3 --> DS_USER : baca tier\npromptLimit
+P3 --> DS_CHAT : simpan ChatHistory\nbuat/update Chat
+DS_CHAT --> P3 : history chat
+P3 --> DS_USAGE : simpan PromptUsage\n(setiap jawaban selesai)
+DS_USAGE --> P3 : count kuota hari ini\n(cek limit FREE user)
+
+P4 --> DS_REG : baca daftar\nincrement viewCount
+DS_REG --> P4 : data regulasi
+
+P4 --> DS_SEARCH : simpan query pencarian
+DS_SEARCH --> P4 : (fire-and-forget)
+
+P5 --> DS_TRX : buat PENDING\nupdate SUCCESS/FAILED
+P5 --> DS_USER : upgrade tier PRO
+DS_TRX --> P5 : status transaksi
+
+P6 --> DS_REG : CRUD regulasi
+P6 --> DS_USER : CRUD user
+P6 --> DS_TREND : CRUD isu terkini
+P6 --> DS_SEARCH : baca log pencarian
+DS_TREND --> P6 : data isu
+DS_USAGE --> P6 : count PromptUsage hari ini\n(hitung sisa kuota per user)
+
+@enduml
+
+' ============================================================
+' DFD LEVEL 2 — PROSES 1.0: MANAJEMEN AUTENTIKASI
+' ============================================================
+@startuml DFD-02-Auth
+title DFD Level 2 — Proses 1.0: Manajemen Autentikasi
+
+skinparam rectangle {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+}
+skinparam usecase {
+  BackgroundColor #EAF2FF
+  BorderColor #2f6fed
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+
+' External Entities
+rectangle "Pengguna" as USER
+rectangle "Google OAuth\nServer" as GOOGLE
+rectangle "Email Service\n(Nodemailer)" as EMAIL
+
+' Sub-proses
+usecase "1.1\nRegistrasi\nEmail" as P11
+usecase "1.2\nLogin\nEmail" as P12
+usecase "1.3\nLogin\nGoogle OAuth" as P13
+usecase "1.4\nLupa\nPassword" as P14
+usecase "1.5\nReset\nPassword" as P15
+usecase "1.6\nLogout" as P16
+usecase "1.7\nMiddleware\nAuth Guard" as P17
+
+' Data Stores
+database "DS1\nUser\n(email, passwordHash\nresetToken, resetTokenExpiry\ntier, role, authProvider)" as DS_USER
+database "DS2\nJWT Cookie\n(HttpOnly)" as DS_JWT
+
+' ── User → Sub-proses ─────────────────────────────────────
+USER --> P11 : email, password
+USER --> P12 : email, password
+USER --> P13 : (via browser GSI)
+USER --> P14 : email
+USER --> P15 : token URL, newPassword
+USER --> P16 : (klik tombol logout)
+USER --> P17 : setiap request ke /api/*
+
+' ── Sub-proses → User ─────────────────────────────────────
+P11 --> USER : HTTP 201 "Registrasi berhasil"
+P12 --> USER : HTTP 200 + data user
+P13 --> USER : HTTP 200 + data user
+P14 --> USER : HTTP 200 pesan generik
+P15 --> USER : HTTP 200 "Password diubah"
+P16 --> USER : Redirect /login (303)
+P17 --> USER : HTTP 401/403 jika tidak valid
+
+' ── Google ────────────────────────────────────────────────
+P13 --> GOOGLE : credential token
+GOOGLE --> P13 : payload (email, name, picture)
+
+' ── Email ─────────────────────────────────────────────────
+P14 --> EMAIL : email + resetURL
+EMAIL --> USER : email berisi link reset
+
+' ── Sub-proses ↔ DS_USER ──────────────────────────────────
+P11 --> DS_USER : INSERT user baru\n(email, bcrypt hash, FREE/USER)
+DS_USER --> P12 : email, passwordHash, tier, role
+
+P13 --> DS_USER : SELECT by email\nINSERT jika baru (Google)
+
+P14 --> DS_USER : UPDATE resetToken (SHA-256)\nresetTokenExpiry (+1 jam)
+DS_USER --> P14 : cek email terdaftar
+
+DS_USER --> P15 : cari by hashedToken\n& expiry > now()
+P15 --> DS_USER : UPDATE passwordHash\nDELETE resetToken
+
+DS_USER --> P17 : tier, role untuk otorisasi
+
+' ── JWT Cookie ────────────────────────────────────────────
+P12 --> DS_JWT : set cookie token\n(HttpOnly, 7 hari)
+P13 --> DS_JWT : set cookie token
+P16 --> DS_JWT : DELETE cookie\n(expires = epoch 0)
+DS_JWT --> P17 : baca token untuk verifikasi
+
+@enduml
+
+' ============================================================
+' DFD LEVEL 2 — PROSES 3.0: CHATBOT AI (RAG PIPELINE)
+' ============================================================
+@startuml DFD-03-ChatRAG
+title DFD Level 2 — Proses 3.0: Chatbot AI (RAG Pipeline, Streaming)
+
+skinparam rectangle {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+}
+skinparam usecase {
+  BackgroundColor #EAF2FF
+  BorderColor #2f6fed
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+
+' External Entities
+rectangle "Pengguna" as USER
+rectangle "VoyageAI\n(voyage-law-2, cached)" as VOYAGE
+rectangle "Pinecone\nVector DB" as PINECONE
+rectangle "Gemini API\n(3.5 Flash-Lite, 3.6 Flash\n3.5 Flash)" as GEMINI
+rectangle "Groq API\n(GPT-OSS 120B\nQwen 3.8, 20 potongan)" as GROQ
+
+' Sub-proses
+usecase "3.1\nVerifikasi Sesi,\nRate Limit & Kuota" as P31
+usecase "3.2\nEmbedding\nQuery (cache)" as P32
+usecase "3.3\nRetrieval & Saring\nDokumen (topK 50)" as P33
+usecase "3.4\nPilih Model & Generate\nJawaban (stream + fallback)" as P34
+usecase "3.5\nSimpan History Chat\n& Pemakaian Kuota" as P35
+usecase "3.6\nAmbil\nHistory Chat" as P36
+usecase "3.7\nRename\nChat" as P37
+usecase "3.8\nHapus\nChat" as P38
+
+' Data Stores
+database "DS1\nUser\n(tier, promptLimit\npersonalContext)" as DS_USER
+database "DS2\nChat\n(id, title, userId\nupdatedAt)" as DS_CHAT
+database "DS3\nChatHistory\n(role, content\nchatId, userId)" as DS_HIST
+database "DS7\nPromptUsage\n(userId, createdAt)" as DS_USAGE
+
+' ── User ↔ Sub-proses ─────────────────────────────────────
+USER --> P31 : message, chatId?, mode,\npreferences, stream:true\n(JWT cookie)
+USER --> P36 : userId, type, chatId?\n(JWT cookie)
+USER --> P37 : chatId, title\n(JWT cookie)
+USER --> P38 : chatId\n(JWT cookie)
+USER --> P34 : sinyal Stop\n(AbortController)
+
+P31 --> USER : HTTP 401 tidak login\nHTTP 429 rate limit (15/menit)\nHTTP 403 kuota FREE habis
+P34 --> USER : stream NDJSON: step, sources,\nmodel, thinking, text
+P36 --> USER : list chat / pesan
+P37 --> USER : HTTP 200 chat diupdate
+P38 --> USER : HTTP 200 chat dihapus
+
+' ── Alur RAG ──────────────────────────────────────────────
+P31 --> P32 : pertanyaan user\n(lolos verifikasi & kuota)
+P32 --> VOYAGE : teks query\n(skip jika sudah di-cache)
+VOYAGE --> P32 : vector float[1024]
+
+P32 --> P33 : query vector
+P33 --> PINECONE : vector + topK:50
+PINECONE --> P33 : 50 dokumen + metadata\n(title, page, text)
+P33 --> P33 : buang duplikat & noise OCR\n(5 teratas selalu dipertahankan)
+
+P33 --> P34 : konteks dokumen hukum\n+ personalContext + preferensi gaya jawaban
+P34 --> GEMINI : system prompt + HumanMessage\n(model sesuai mode dipilih)
+GEMINI --> P34 : stream teks/ringkasan berpikir\n(Markdown)
+P34 --> GROQ : system prompt (20 potongan)\n(bila mode = Groq)
+GROQ --> P34 : stream teks/ringkasan berpikir
+P34 --> P34 : gagal sebelum menulis?\n-> coba model Gemini cadangan\n(fallback, transparan ke user)
+
+P34 --> P35 : jawaban + pertanyaan\n(dilewati jika Stop sebelum menulis)
+P35 --> P31 : (trigger setelah AI selesai/Stop)
+
+' ── Data Store ↔ Sub-proses ───────────────────────────────
+DS_USER --> P31 : tier, promptLimit\npersonalContext
+DS_USAGE --> P31 : count PromptUsage hari ini\n(cek limit FREE user)
+
+P35 --> DS_CHAT : INSERT chat baru\natau UPDATE updatedAt
+P35 --> DS_HIST : INSERT role=USER (pertanyaan)\nINSERT role=AI (jawaban)
+P35 --> DS_USAGE : INSERT PromptUsage\n(juga saat Stop setelah mulai menulis)
+
+DS_CHAT --> P36 : daftar chat user
+DS_HIST --> P36 : pesan dalam chat
+
+DS_CHAT --> P37 : findUnique + cek ownership
+P37 --> DS_CHAT : UPDATE title
+
+DS_CHAT --> P38 : findUnique + cek ownership
+P38 --> DS_CHAT : DELETE chat\n(cascade: ChatHistory,\nPromptUsage TIDAK ikut terhapus)
+
+@enduml
+
+' ============================================================
+' DFD LEVEL 2 — PROSES 4.0: PUSAT DATA HUKUM
+' ============================================================
+@startuml DFD-04-Regulations
+title DFD Level 2 — Proses 4.0: Pusat Data Hukum
+
+skinparam rectangle {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+}
+skinparam usecase {
+  BackgroundColor #EAF2FF
+  BorderColor #2f6fed
+}
+skinparam rectangle {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+
+' External Entities
+rectangle "Pengguna" as USER
+rectangle "Supabase Storage\n(legal-documents)" as SUPABASE
+
+' Sub-proses
+usecase "4.1\nCari &\nFilter Regulasi" as P41
+usecase "4.2\nDetail\nRegulasiSatu" as P42
+usecase "4.3\nDownload\nPDF (Proxy)" as P43
+usecase "4.4\nLog\nPencarian" as P44
+usecase "4.5\nResolve\nSitasi AI" as P45
+
+' Data Stores
+database "DS3\nRegulation\n(title, category, fileUrl\nviewCount, isActive)" as DS_REG
+database "DS5\nSearchLog\n(query, userId\ncreatedAt)" as DS_SEARCH
+
+' ── User ↔ Sub-proses ─────────────────────────────────────
+USER --> P41 : keyword, category\npage, limit, sortBy
+USER --> P42 : regulationId
+USER --> P43 : fileUrl, fileName
+USER --> P45 : judul sitasi dari\njawaban AI (klik)
+
+P41 --> USER : {data: [], meta: {totalData\ncurrentPage, totalPages}}
+P42 --> USER : {data: regulation}
+P43 --> USER : buffer PDF\n(Content-Disposition: attachment)
+P45 --> USER : {data: {judul: {id, fileUrl}}}\n(tautan dokumen sumber)
+
+' ── Sub-proses ↔ DS_REG ───────────────────────────────────
+DS_REG --> P41 : findMany (isActive=true)\n+ count total
+DS_REG --> P42 : findUnique by id
+
+P42 --> DS_REG : UPDATE viewCount +1\n(fire-and-forget)
+
+' ── Logging Pencarian ─────────────────────────────────────
+P41 --> P44 : keyword (jika ada)
+P44 --> DS_SEARCH : INSERT SearchLog\n{query, userId}\n(async, non-blocking)
+
+' ── Download Proxy ────────────────────────────────────────
+P43 --> SUPABASE : fetch(fileUrl)\n[validasi domain *.supabase.co\nblokir SSRF]
+SUPABASE --> P43 : buffer PDF raw
+P43 --> P43 : sanitasi fileName\n(hapus karakter berbahaya)
+
+' ── Resolve Sitasi (baru) ──────────────────────────────────
+DS_REG --> P45 : findMany (cocok persis ATAU\nakhiran "- judul", isActive=true)
+note right of P45
+  Rate limit: 60/menit/IP.
+  Maks 20 judul, 300 karakter/judul.
+  Tidak mencatat SearchLog.
+end note
+
+@enduml
+
+' ============================================================
+' DFD LEVEL 2 — PROSES 5.0: MANAJEMEN PEMBAYARAN
+' ============================================================
+@startuml DFD-05-Payment
+title DFD Level 2 — Proses 5.0: Manajemen Pembayaran
+
+skinparam rectangle {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+}
+skinparam usecase {
+  BackgroundColor #EAF2FF
+  BorderColor #2f6fed
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+
+' External Entities
+rectangle "Pengguna" as USER
+rectangle "Midtrans\n(Snap API + CoreAPI)" as MIDTRANS
+
+' Sub-proses
+usecase "5.1\nInisiasi\nCheckout" as P51
+usecase "5.2\nProses\nWebhook" as P52
+usecase "5.3\nSelf-Healing\nSync Status" as P53
+
+' Data Stores
+database "DS1\nUser\n(tier, email)" as DS_USER
+database "DS4\nTransaction\n(orderId, status\nuserId, amount, paymentUrl)" as DS_TRX
+
+' ── User ↔ P51 ────────────────────────────────────────────
+USER --> P51 : userId\n(POST /api/payment/checkout)
+P51 --> USER : {token, redirect_url}
+USER --> MIDTRANS : buka Snap popup\nlakukan pembayaran
+
+' ── P51 ↔ Data Stores ────────────────────────────────────
+DS_USER --> P51 : email, tier\n(cek apakah sudah PRO)
+P51 --> DS_TRX : INSERT transaksi\n{orderId, PENDING, 49900}
+P51 --> MIDTRANS : {transaction_details\nitem_details, customer_details}
+MIDTRANS --> P51 : {token, redirect_url}
+P51 --> DS_TRX : UPDATE paymentUrl
+
+' ── Midtrans → P52 (Webhook) ──────────────────────────────
+MIDTRANS --> P52 : {order_id, transaction_status\nfraud_status, signature_key}\n(POST /api/payment/webhook)
+
+P52 --> P52 : verifikasi SHA512 signature\n(production only)
+P52 --> P52 : mapping status:\ncapture/settlement → SUCCESS\nfraud=challenge → PENDING\ncancel/deny/expire → FAILED
+
+DS_TRX --> P52 : findUnique by orderId\ncek idempotency (status=SUCCESS?)
+P52 --> DS_TRX : UPDATE status transaksi
+P52 --> DS_USER : UPDATE tier=PRO\npromptLimit=0\n(jika SUCCESS, atomic)
+P52 --> MIDTRANS : HTTP 200 "OK"
+
+' ── Self-Healing (P53) ────────────────────────────────────
+DS_TRX --> P53 : findFirst PENDING\n(saat GET /api/profile)
+P53 --> MIDTRANS : CoreAPI.status(orderId)
+MIDTRANS --> P53 : transaction_status
+P53 --> DS_TRX : UPDATE SUCCESS\n(jika settlement/capture)
+P53 --> DS_USER : UPDATE tier=PRO\n(atomic transaction)
+
+@enduml
+
+' ============================================================
+' DFD LEVEL 2 — PROSES 2.0: MANAJEMEN PROFIL
+' ============================================================
+@startuml DFD-06-Profile
+title DFD Level 2 — Proses 2.0: Manajemen Profil & Avatar
+
+skinparam rectangle {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+}
+skinparam usecase {
+  BackgroundColor #EAF2FF
+  BorderColor #2f6fed
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+
+' External Entities
+rectangle "Pengguna" as USER
+rectangle "Supabase Storage\n(avatars bucket)" as SUPABASE
+
+' Sub-proses
+usecase "2.1\nLihat\nProfil" as P21
+usecase "2.2\nUpdate\nProfil" as P22
+usecase "2.3\nUpload\nAvatar" as P23
+usecase "2.4\nHapus\nAkun" as P24
+usecase "2.5\nHapus Semua\nRiwayat Chat" as P25
+usecase "2.6\nAtur Personalisasi\nGaya Jawaban" as P26
+
+' Data Stores
+database "DS1\nUser\n(name, email, avatarUrl\npasswordHash, personalContext\ntier, promptLimit)" as DS_USER
+database "DS2\nJWT Cookie" as DS_JWT
+database "DS2b\nChat &\nChatHistory" as DS_CHAT
+
+' ── User ↔ Sub-proses ─────────────────────────────────────
+USER --> P21 : GET /api/profile\n(JWT cookie)
+USER --> P22 : PATCH /api/profile\n{name, email, newPassword\navatarUrl, personalContext}
+USER --> P23 : POST /api/profile/upload\nFormData {file: image}
+USER --> P24 : DELETE /api/profile\n(JWT cookie)
+USER --> P25 : DELETE /api/chat/history\n{confirm: "HAPUS"} (JWT cookie)
+USER --> P26 : pilih 7 preferensi\ngaya jawaban
+
+P21 --> USER : {id, name, email, avatarUrl\ntier, promptLimit, personalContext}
+P22 --> USER : {user: updated data}
+P23 --> USER : {url: publicUrl, user}
+P24 --> USER : HTTP 200 "Akun dihapus"
+P25 --> USER : HTTP 200 {deletedChats: n}
+P26 --> USER : (tersimpan, tidak ada respons server)
+
+' ── JWT ───────────────────────────────────────────────────
+DS_JWT --> P21 : token → verifyToken → userId
+DS_JWT --> P22 : token → verifyToken → userId
+DS_JWT --> P23 : token → verifyToken → userId
+DS_JWT --> P24 : token → verifyToken → userId
+DS_JWT --> P25 : token → getSession → userId
+P24 --> DS_JWT : DELETE cookie (expires=0)
+
+' ── DS_USER ↔ Sub-proses ──────────────────────────────────
+DS_USER --> P21 : SELECT profil user\n(tidak expose passwordHash)
+P21 --> P21 : cek self-healing PRO\n(jika tier=FREE)
+
+DS_USER --> P22 : findUnique → validasi\n(currentPassword, dll)
+P22 --> DS_USER : UPDATE {field yang berubah}\nbcrypt hash jika ganti password
+
+P23 --> SUPABASE : upload buffer\n{userId}.{ext} → upsert:true
+SUPABASE --> P23 : public URL + cache-busting
+P23 --> DS_USER : UPDATE avatarUrl = publicUrl
+
+P24 --> DS_USER : DELETE user\n(cascade: Chat, ChatHistory\nTransaction, PromptUsage)
+
+' ── Hapus Semua Riwayat (baru) ─────────────────────────────
+P25 --> DS_CHAT : DELETE chat.deleteMany({userId})\n(cascade: ChatHistory)
+note right of P25
+  Rate limit: 3/menit/userId.
+  PromptUsage TIDAK ikut terhapus
+  (tabel terpisah) -> kuota harian
+  tidak kembali/reset.
+end note
+
+' ── Personalisasi (baru, tanpa DB) ─────────────────────────
+note right of P26
+  TIDAK disimpan ke database.
+  Preferensi disimpan di localStorage
+  browser dan dikirim bersama setiap
+  pertanyaan ke Proses 3.0 (whitelist
+  di server, anti prompt injection).
+end note
+
+' ── Validasi P22 ──────────────────────────────────────────
+note right of P22
+  Validasi PATCH:
+  - avatarUrl harus diawali "http"
+  - currentPassword wajib jika ganti password
+  - personalContext maks 500 karakter
+  - Minimal 1 field harus berubah
+end note
+
+' ── Validasi P23 ──────────────────────────────────────────
+note right of P23
+  Validasi Upload:
+  - Maks 2MB
+  - Ekstensi: jpg/jpeg/png/webp
+  - MIME: image/jpeg|png|webp
+end note
+
+@enduml
+
+' ============================================================
+' DFD LEVEL 2 — PROSES 6.0: ADMIN PANEL
+' ============================================================
+@startuml DFD-07-Admin
+title DFD Level 2 — Proses 6.0: Admin Panel
+
+skinparam rectangle {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+}
+skinparam usecase {
+  BackgroundColor #FFF3E0
+  BorderColor #e67e22
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+
+' External Entities
+rectangle "Admin" as ADMIN
+rectangle "Supabase Storage\n(legal-documents)" as SUPABASE
+rectangle "Middleware\nAuth Guard\n(JWT + role=ADMIN)" as MW
+
+' Sub-proses
+usecase "6.1\nDashboard\nAnalitik Admin" as P61
+usecase "6.2\nManajemen\nUser" as P62
+usecase "6.3\nManajemen\nRegulasiAdmin" as P63
+usecase "6.4\nManajemen\nIsu Terkini" as P64
+usecase "6.5\nLog\nPencarian" as P65
+
+' Data Stores
+database "DS1\nUser\n(id, email, name\nrole, tier, promptLimit)" as DS_USER
+database "DS3\nRegulation\n(title, fileUrl, category\nisActive, viewCount)" as DS_REG
+database "DS5\nSearchLog\n(query, userId\ncreatedAt)" as DS_SEARCH
+database "DS6\nTrendingIssue\n(title, description\npublishDate, newsLink)" as DS_TREND
+database "DS2\nChat &\nChatHistory" as DS_CHAT
+database "DS4\nTransaction" as DS_TRX
+database "DS7\nPromptUsage\n(baru)" as DS_USAGE
+
+' ── Auth Guard ────────────────────────────────────────────
+ADMIN --> MW : JWT cookie
+MW --> ADMIN : HTTP 401/403 jika tidak valid
+MW --> P61 : request diotorisasi
+MW --> P62 : request diotorisasi
+MW --> P63 : request diotorisasi
+MW --> P64 : request diotorisasi
+MW --> P65 : request diotorisasi
+
+' ── P61: Analitik ─────────────────────────────────────────
+DS_USER --> P61 : count total\ncount PRO/FREE\ncount ADMIN\ncount new (minggu ini)
+DS_CHAT --> P61 : count hari ini\ncount total\nactive users today
+DS_REG --> P61 : count total\nsum viewCount\ntop 5 popular\ntop 5 recent\ngroupBy category
+DS_TRX --> P61 : (via user data)
+DS_SEARCH --> P61 : groupBy createdAt\n(30 hari terakhir)
+DS_TREND --> P61 : top 5 terbaru
+P61 --> ADMIN : {cards, popularDocs\nrecentDocs, trendingIssues\nsearchTrends, categoryDistribution\nuserDistribution}
+
+' ── P62: User Management ──────────────────────────────────
+ADMIN --> P62 : GET / POST / PATCH / DELETE
+DS_USER --> P62 : findMany + last active
+DS_USAGE --> P62 : _count promptUsages hari ini\n(diperbaiki — BUG-06, sebelumnya\nsalah hitung dari ChatHistory)
+P62 --> DS_USER : INSERT / UPDATE / DELETE
+P62 --> ADMIN : daftar user + remainingQuota\n(promptLimit - promptUsages)
+
+' ── P63: Regulations Management ───────────────────────────
+ADMIN --> P63 : GET / POST / PATCH / DELETE\n+ upload file PDF
+P63 --> SUPABASE : upload PDF\nbucket "legal-documents"
+SUPABASE --> P63 : file URL
+DS_REG --> P63 : findMany (semua, termasuk nonaktif)
+P63 --> DS_REG : INSERT / UPDATE / DELETE
+P63 --> ADMIN : daftar regulasi
+
+' ── P64: Trending Issues ──────────────────────────────────
+ADMIN --> P64 : GET / POST / PATCH / DELETE
+DS_TREND --> P64 : findMany
+P64 --> DS_TREND : INSERT / UPDATE / DELETE
+P64 --> ADMIN : daftar isu terkini
+
+' ── P65: Search Logs ──────────────────────────────────────
+DS_SEARCH --> P65 : findMany
+P65 --> ADMIN : log pencarian user
+
+@enduml

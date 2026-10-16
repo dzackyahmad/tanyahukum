@@ -1,0 +1,119 @@
+{
+  "judge": "gemini-3.5-flash-lite",
+  "modes": {
+    "lite": {
+      "faithfulness": 0.9857142857142858,
+      "answer_relevancy": 0.9137243350955109,
+      "answer_correctness": 0.7869918749635199,
+      "factual_correctness": 0.7889999999999999,
+      "rouge_l": 0.5462189031758552,
+      "bleu": 0.24794701829931293,
+      "string_similarity": 0.42982213696237287,
+      "n": 10,
+      "avg_time_s": 7.1741,
+      "llm_avg": 0.868857623943329
+    },
+    "fast": {
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.930508938213854,
+      "answer_correctness": 0.829267288124479,
+      "factual_correctness": 0.7710000000000001,
+      "rouge_l": 0.557734506062294,
+      "bleu": 0.258260836226641,
+      "string_similarity": 0.45009218148416935,
+      "n": 10,
+      "avg_time_s": 17.287799999999997,
+      "llm_avg": 0.8826940565845833
+    },
+    "next": {
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.9236286873831769,
+      "answer_correctness": 0.804085388888417,
+      "factual_correctness": 0.796,
+      "rouge_l": 0.5659245458323968,
+      "bleu": 0.2608339109290875,
+      "string_similarity": 0.4446288476917387,
+      "n": 10,
+      "avg_time_s": 12.070200000000002,
+      "llm_avg": 0.8809285190678986
+    },
+    "gptoss": {
+      "faithfulness": 0.9563888888888888,
+      "answer_relevancy": 0.929548798633137,
+      "answer_correctness": 0.7617312061116402,
+      "factual_correctness": 0.646,
+      "rouge_l": 0.4370693384579809,
+      "bleu": 0.24149421535084742,
+      "string_similarity": 0.37286849023392,
+      "n": 10,
+      "avg_time_s": 5.7524999999999995,
+      "llm_avg": 0.8234172234084165
+    },
+    "qwen": {
+      "faithfulness": 0.9857142857142858,
+      "answer_relevancy": 0.9553442757199981,
+      "answer_correctness": 0.796197870092672,
+      "factual_correctness": 0.735,
+      "rouge_l": 0.5194328026486643,
+      "bleu": 0.3012695450468131,
+      "string_similarity": 0.4414482531802844,
+      "n": 10,
+      "avg_time_s": 5.0346,
+      "llm_avg": 0.8680641078817389
+    }
+  },
+  "context": {
+    "context_precision@10": 0.7541666665985417,
+    "context_recall_gemini": 0.9333333333333332,
+    "context_recall_groq": 0.8583333333333332
+  },
+  "per_domain": {
+    "lite": {
+      "Ketenagakerjaan": 0.7846189083646378,
+      "Perdata": 0.7893648415624016
+    },
+    "fast": {
+      "Ketenagakerjaan": 0.891558954140297,
+      "Perdata": 0.7669756221086611
+    },
+    "next": {
+      "Ketenagakerjaan": 0.8292023933505771,
+      "Perdata": 0.7789683844262569
+    },
+    "gptoss": {
+      "Ketenagakerjaan": 0.7473204562269604,
+      "Perdata": 0.7761419559963201
+    },
+    "qwen": {
+      "Ketenagakerjaan": 0.7864722111350875,
+      "Perdata": 0.8059235290502563
+    }
+  },
+  "per_difficulty": {
+    "lite": {
+      "easy": 0.8595567607262469,
+      "medium": 0.6563197018541654,
+      "hard": 0.9032064496567737
+    },
+    "fast": {
+      "easy": 0.8380724245123883,
+      "medium": 0.7545116067447497,
+      "hard": 0.9611683781081191
+    },
+    "next": {
+      "easy": 0.777923488114872,
+      "medium": 0.7927242982034093,
+      "hard": 0.8791313718055221
+    },
+    "gptoss": {
+      "easy": 0.7460934670781145,
+      "medium": 0.7711477354763245,
+      "hard": 0.7741736254493234
+    },
+    "qwen": {
+      "easy": 0.7170253946877001,
+      "medium": 0.8091528295470295,
+      "hard": 0.9286329019939006
+    }
+  }
+}

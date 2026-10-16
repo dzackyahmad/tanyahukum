@@ -30,6 +30,21 @@ async function getTokenRole(token) {
   }
 }
 
+async function hasValidSession(token) {
+  if (!token || !process.env.JWT_SECRET) return false;
+  try {
+    const encodedSecret = new TextEncoder().encode(process.env.JWT_SECRET);
+    await jwtVerify(token, encodedSecret, { algorithms: ['HS256'] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Halaman yang wajib login — datanya sudah dilindungi di API (getSession),
+// ini menutup celah UI (sidebar, layout, empty state) yang masih ter-render untuk tamu.
+const LOGIN_REQUIRED_PAGES = ['/dashboard', '/pusat-data'];
+
 export async function middleware(request) {
   // 1. Ambil "ID Card" (token JWT) dari Cookies
   const token = request.cookies.get('token')?.value;
@@ -44,6 +59,14 @@ export async function middleware(request) {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
     const role = await getTokenRole(token);
     if (role !== 'ADMIN') {
+      return NextResponse.redirect(new URL('/chatbot', request.url));
+    }
+  }
+
+  // 1c. Halaman Dashboard & Pusat Data wajib login (lihat LOGIN_REQUIRED_PAGES)
+  if (LOGIN_REQUIRED_PAGES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    const authorized = await hasValidSession(token);
+    if (!authorized) {
       return NextResponse.redirect(new URL('/chatbot', request.url));
     }
   }

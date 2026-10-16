@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { describeMode, isThinkingMode } from "./ModeToggle";
 
 // Panel transparansi proses jawaban AI. Semua isi berasal dari event server yang
 // benar-benar terjadi (lihat mode streaming di app/api/chat/route.js) — bukan animasi tebakan.
@@ -27,6 +28,8 @@ function useElapsed(startedAt, running) {
   }, [running]);
   return startedAt ? Math.max(0, now - startedAt) : null;
 }
+
+const shortModeLabel = (id) => describeMode(id)?.mode.label || id;
 
 const STEP_LABELS = {
   search: { active: "Mencari dokumen hukum yang relevan…", done: "Menelusuri database dokumen hukum" },
@@ -71,7 +74,7 @@ export default function ProcessPanel({ process }) {
         {process.done ? <CheckIcon /> : <Spinner />}
         <span className="font-medium">
           {process.done
-            ? `Proses${process.durationMs ? ` · ${formatSeconds(process.durationMs)}` : ""}`
+            ? `Proses${process.durationMs ? ` · ${formatSeconds(process.durationMs)}` : ""}${process.mode ? ` · ${shortModeLabel(process.mode)}` : ""}`
             : `Sedang memproses…${elapsed !== null ? ` ${formatSeconds(elapsed)}` : ""}`}
         </span>
         <span className="ml-auto text-xs text-gray-400 dark:text-slate-500 group-hover/proc:text-blue-600 dark:group-hover/proc:text-blue-400 transition-colors">
@@ -87,12 +90,27 @@ export default function ProcessPanel({ process }) {
 
       {open && (
         <ol className="px-3.5 pb-3 space-y-2.5">
+          {/* Model & mode yang dipakai (transparansi) */}
+          {process.model && (
+            <li className="text-[12px] text-gray-500 dark:text-slate-400">
+              Model: <span className="font-medium text-gray-700 dark:text-slate-300">{process.model}</span>
+              {process.mode && <> · Mode {shortModeLabel(process.mode)}{isThinkingMode(process.mode) ? " (dengan proses berpikir)" : " (tanpa proses berpikir)"}</>}
+              {process.provider === "groq" && process.contextChunks ? <> · membaca {process.contextChunks} potongan teratas (batas gratis Groq)</> : null}
+              {process.fallback && (
+                <p className="mt-1 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400">
+                  Kuota model utama sedang habis, jawaban dibuat dengan model cadangan.
+                </p>
+              )}
+            </li>
+          )}
+
           {/* 1. Pencarian dokumen */}
           <Step state={process.steps.search} labels={STEP_LABELS.search} duration={durations.search}>
             {process.sources && (
               <div className="mt-1 text-gray-500 dark:text-slate-400">
                 <p>
-                  Menemukan {process.sources.count} potongan teks dari {process.sources.uniqueCount} dokumen.
+                  Menemukan {process.sources.count} potongan teks dari {process.sources.uniqueCount} dokumen
+                  {process.sources.filtered > 0 ? `; ${process.sources.filtered} potongan tidak berguna (duplikat/tabel kosong) disaring.` : "."}
                   {process.sources.docs.length > 0 && " Dokumen teratas:"}
                 </p>
                 {process.sources.docs.length > 0 && (

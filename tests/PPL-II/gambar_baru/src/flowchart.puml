@@ -1,0 +1,1300 @@
+'==============================================================
+' FLOWCHART SISTEM TANYAHUKUM
+' Pendekatan: Prosedural/Struktural
+' Tool: PlantUML Activity Diagram
+'==============================================================
+
+' ============================================================
+' 1. ALUR REGISTRASI
+' ============================================================
+@startuml FC-01-Register
+title FC-01: Alur Registrasi Pengguna\nPOST /api/auth/register
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna mengisi form registrasi\n(email, password);
+:Sistem cek rate limit IP\n(maks 10 req/menit);
+
+if (Rate limit tercapai?) then (Ya)
+  :Kembalikan\nHTTP 429;
+  stop
+endif
+
+:Normalisasi email\n(trim + lowercase);
+
+if (Email atau password kosong?) then (Ya)
+  :Kembalikan\nHTTP 400;
+  stop
+endif
+
+if (Format email tidak valid?) then (Ya)
+  :Kembalikan\nHTTP 400;
+  stop
+endif
+
+if (Password < 8 karakter?) then (Ya)
+  :Kembalikan\nHTTP 400;
+  stop
+endif
+
+:Query DB — cek email sudah ada?;
+
+if (Email sudah terdaftar?) then (Ya)
+  if (Provider = GOOGLE?) then (Ya)
+    :Kembalikan HTTP 409\n+ hint "pakai tombol Google";
+    stop
+  else (Tidak)
+    :Kembalikan HTTP 409\n"Email sudah digunakan";
+    stop
+  endif
+endif
+
+:Hash password dengan bcrypt\n(salt rounds 10);
+:Simpan user baru ke database\n(tier: FREE, role: USER);
+
+if (DB constraint P2002 (race condition)?) then (Ya)
+  :Kembalikan HTTP 409;
+  stop
+endif
+
+:Kembalikan HTTP 201\n"Registrasi berhasil";
+stop
+@enduml
+
+' ============================================================
+' 2. ALUR LOGIN
+' ============================================================
+@startuml FC-02-Login
+title FC-02: Alur Login\nPOST /api/auth/login
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna mengirim email & password;
+:Sistem cek rate limit IP\n(maks 5 percobaan/menit);
+
+if (Rate limit tercapai?) then (Ya)
+  :Kembalikan HTTP 429;
+  stop
+endif
+
+:Parse request body JSON;
+
+if (Body bukan JSON valid?) then (Ya)
+  :Kembalikan HTTP 400\n"Request body tidak valid";
+  stop
+endif
+
+:Validasi format email & panjang password;
+
+if (Validasi gagal?) then (Ya)
+  :Kembalikan HTTP 400;
+  stop
+endif
+
+:Normalisasi email (lowercase);
+
+if (rateLimit(email, 10/menit, "login-email") terlampaui?) then (Ya)
+  :Kembalikan HTTP 429;
+  stop
+endif
+
+:Query DB — cari user berdasarkan email;
+note right
+  Jika user tidak ditemukan,
+  tetap jalankan bcrypt.compare
+  dengan dummy hash untuk
+  mencegah timing attack
+end note
+
+:bcrypt.compare(password, hash);
+
+if (Gagal DAN user ada DAN password\npunya spasi di awal/akhir?) then (Ya)
+  :bcrypt.compare(password.trim(), hash);
+  note right
+    Perbaikan (BUG-07): registrasi
+    menyimpan password ter-trim.
+  end note
+endif
+
+if (!user || password tidak cocok?) then (Ya)
+  :Kembalikan HTTP 401\n"Email atau password salah";
+  stop
+endif
+
+:Buat JWT token\n(userId, email, tier, role);
+:Set cookie HttpOnly "token"\n(maxAge: 7 hari, sameSite: lax);
+:Kembalikan HTTP 200\n+ data user;
+stop
+@enduml
+
+' ============================================================
+' 3. ALUR LOGIN GOOGLE OAUTH
+' ============================================================
+@startuml FC-03-GoogleOAuth
+title FC-03: Alur Login / Register via Google OAuth\nPOST /api/auth/google
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna klik tombol "Login with Google";
+:Browser memuat Google Sign-In (GSI) SDK;
+:Pengguna memilih akun Google;
+:Google mengembalikan credential token\nke callback frontend;
+:Frontend kirim POST /api/auth/google\n{credentialToken};
+
+if (credentialToken tidak ada?) then (Ya)
+  :Kembalikan HTTP 400;
+  stop
+endif
+
+:Verifikasi token ke server Google\n(client.verifyIdToken);
+
+if (Token palsu / tidak valid?) then (Ya)
+  :Kembalikan HTTP 401;
+  stop
+endif
+
+:Ambil payload\n(email, name, picture);
+
+if (Email tidak ada di payload?) then (Ya)
+  :Kembalikan HTTP 400;
+  stop
+endif
+
+:Query DB — cari user berdasarkan email;
+
+if (User belum terdaftar?) then (Ya)
+  :Auto-register user baru\n(authProvider: GOOGLE\ntier: FREE, role: USER);
+endif
+
+:Buat JWT token;
+:Set cookie HttpOnly "token";
+:Kembalikan HTTP 200\n+ data user;
+stop
+@enduml
+
+' ============================================================
+' 4. ALUR LUPA & RESET PASSWORD
+' ============================================================
+@startuml FC-04-ForgotResetPassword
+title FC-04: Alur Lupa & Reset Password\nPOST /api/auth/forgot-password\nPOST /api/auth/reset-password
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+partition "Tahap 1 — Forgot Password" {
+  :Pengguna masukkan email;
+  :Cek rate limit\n(maks 3 req / 15 menit);
+
+  if (Rate limit tercapai?) then (Ya)
+    :Kembalikan HTTP 429;
+    stop
+  endif
+
+  if (Email kosong atau format salah?) then (Ya)
+    :Kembalikan HTTP 400;
+    stop
+  endif
+
+  :Query DB — cari user;
+
+  if (User tidak ditemukan?) then (Ya)
+    :Kembalikan HTTP 200\npesan generik\n(anti user-enumeration);
+    stop
+  endif
+
+  :Generate random token\n(crypto.randomBytes 32);
+  :Hash token dengan SHA-256;
+  :Simpan hashed token + expiry\n(+1 jam) ke DB;
+  :Kirim email berisi\nlink reset (token plaintext);
+  :Kembalikan HTTP 200\npesan generik;
+}
+
+partition "Tahap 2 — Reset Password" {
+  :Pengguna klik link di email\n(/reset-password?token=xxx);
+  :Pengguna masukkan password baru;
+  :Kirim POST /api/auth/reset-password\n{token, newPassword};
+
+  if (Token atau password tidak ada?) then (Ya)
+    :Kembalikan HTTP 400;
+    stop
+  endif
+
+  if (Password < 8 karakter?) then (Ya)
+    :Kembalikan HTTP 400;
+    stop
+  endif
+
+  :Hash token dari URL (SHA-256);
+  :Query DB — cari user dengan\nhashed token & expiry > now();
+
+  if (Token tidak valid / expired?) then (Ya)
+    :Kembalikan HTTP 400;
+    stop
+  endif
+
+  :Hash password baru (bcrypt salt 12);
+  :Update DB:\n- passwordHash = hash baru\n- resetToken = null\n- resetTokenExpiry = null;
+  :Kembalikan HTTP 200\n"Password berhasil diubah";
+}
+stop
+@enduml
+
+' ============================================================
+' 5. ALUR LOGOUT
+' ============================================================
+@startuml FC-05-Logout
+title FC-05: Alur Logout\nPOST /api/logout
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna klik tombol Logout;
+:Frontend kirim POST /api/logout;
+:Ambil sesi Supabase (getUser);
+
+if (Ada sesi Supabase aktif?) then (Ya)
+  :signOut global Supabase\n(invalidate server session);
+endif
+
+:Set cookie "token" = ""\n(expires: epoch 0 — hapus cookie JWT);
+:Redirect ke /login (HTTP 303);
+:Hapus data localStorage\n(user, conversations, active_conversation_id);
+:Dispatch event "auth-change"\nke semua komponen;
+stop
+@enduml
+
+' ============================================================
+' 6. ALUR MIDDLEWARE (AUTH GUARD ADMIN)
+' ============================================================
+@startuml FC-06-Middleware
+title FC-06: Alur Middleware — CSRF & Guard Halaman/API\nmiddleware.js
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Request masuk ke sistem;
+:Baca cookie "token" dari request;
+
+if (Request /api yang mengubah data\ndari origin lain? (CSRF)) then (Ya)
+  :Kembalikan HTTP 403\n"cross-origin request";
+  stop
+endif
+
+if (Halaman /admin*?) then (Ya)
+  if (Role di JWT bukan ADMIN?) then (Ya)
+    :Redirect ke /chatbot;
+    stop
+  endif
+endif
+
+if (Halaman /dashboard* atau /pusat-data*?) then (Ya)
+  if (Tidak ada JWT yang valid?) then (Ya)
+    :Redirect ke /chatbot\n(tamu login dari sana);
+    stop
+  endif
+endif
+
+if (Path dimulai dengan /api/admin?) then (Ya)
+  if (Token tidak ada?) then (Ya)
+    :Kembalikan HTTP 401\n"Harap login terlebih dahulu";
+    stop
+  endif
+
+  if (JWT_SECRET tidak di-set?) then (Ya)
+    :Kembalikan HTTP 500\n"Server configuration error"\n(fail-closed);
+    stop
+  endif
+
+  :Verifikasi JWT\n(jose.jwtVerify);
+
+  if (Token tidak valid / expired?) then (Ya)
+    :Kembalikan HTTP 401\n"Token tidak valid";
+    stop
+  endif
+
+  if (role !== ADMIN?) then (Ya)
+    :Kembalikan HTTP 403\n"Admin access only";
+    stop
+  endif
+
+else (Tidak)
+  note right: Endpoint publik & user\ntidak butuh pengecekan admin
+endif
+
+:Set Cache-Control headers\n(no-store, no-cache);
+:Teruskan request ke handler;
+stop
+@enduml
+
+' ============================================================
+' 7. ALUR CHAT RAG (FITUR UTAMA)
+' ============================================================
+@startuml FC-07-ChatRAG
+title FC-07: Alur Chat RAG — Mode Streaming (Fitur Utama)\nPOST /api/chat {stream:true}
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna pilih model & mode\n(5 model x Kilat/Berpikir), ketik pertanyaan\ndan klik Kirim;
+:Frontend kirim POST /api/chat\n{message, chatId?, mode, preferences, stream:true};
+
+:Verifikasi sesi dari JWT cookie\n(getSession);
+
+if (Sesi tidak ada?) then (Ya)
+  :Kembalikan HTTP 401;
+  stop
+endif
+
+if (Pesan kosong atau > 5000 karakter?) then (Ya)
+  :Kembalikan HTTP 400;
+  stop
+endif
+
+if (rateLimit(userId, 15/menit) terlampaui?) then (Ya)
+  :Kembalikan HTTP 429;
+  stop
+endif
+
+:Ambil userId dari JWT\n(bukan dari body!);
+:Baca DB paralel (Promise.all):\nuser, existingChat (jika chatId),\npromptUsage.count hari ini;
+
+if (chatId ada tapi bukan milik user\nATAU user tidak ditemukan?) then (Ya)
+  :Kembalikan HTTP 404;
+  stop
+endif
+
+if (tier = FREE\nDAN count PromptUsage hari ini >= promptLimit?) then (Ya)
+  :Kembalikan HTTP 403\n{limitReached: true};
+  stop
+else (Tidak / PRO bypass)
+endif
+
+partition "Pipeline RAG (streaming)" {
+  :Kirim event NDJSON "step" {search, active};
+  :Embed pertanyaan\n(VoyageAI voyage-law-2,\ndi-cache per pertanyaan sama);
+  :Query Pinecone Vector DB\n(topK: 50, includeMetadata: true);
+  :cleanMatches(): buang duplikat\n& noise OCR (5 teratas tetap dipertahankan);
+  :Kirim event "sources" {count, used, docs}\n"step" {search, done};
+
+  if (user.personalContext ada?) then (Ya)
+    :Tambahkan konteks personal\nsebagai invisible context;
+  endif
+  :Sisipkan preferensi gaya jawaban\n(whitelist, anti prompt injection);
+  :Bangun system prompt\n(role + dokumen hukum + aturan format + preferensi);
+
+  repeat :Ambil model berikutnya dari modelChain\n(model pilihan dulu, lalu cadangan Gemini);
+    :Kirim event "model" {model, provider,\nmode, fallback};
+    :Stream dari Gemini/Groq\n(AbortController untuk Stop);
+
+    if (Pengguna menekan Stop?) then (Ya)
+      :abortController.abort();
+      if (Sudah sempat menulis jawaban?) then (Ya)
+        :Simpan PromptUsage (kuota tetap terpakai);
+      endif
+      :Tutup stream, TIDAK simpan riwayat;
+      stop
+    endif
+
+    if (Gagal SEBELUM mulai menulis\n(kuota 429/413 atau server 5xx)?) then (Ya)
+      :Catat error, lanjut ke model berikutnya;
+    else (Berhasil menulis / gagal setelah menulis)
+      :Kirim event "thinking"? + "text"\n(tiap chunk jawaban);
+    endif
+  repeat while (Masih ada model lain\nDAN belum berhasil menulis?) is (Ya) not (Tidak)
+
+  if (Semua model gagal?) then (Ya)
+    :Kirim event "error"\n"Kuota AI hari ini telah habis";
+    stop
+  endif
+}
+
+if (chatId dikirim di body?) then (Ya)
+  :pakai existingChat yang sudah divalidasi;
+else (Tidak)
+  :Buat chat baru\n(title = 30 char pertama pesan);
+endif
+
+:Simpan ke DB secara paralel\n(Promise.all):
+note right
+  1. promptUsage.create (catat kuota)
+  2. ChatHistory role=USER (pertanyaan)
+  3. ChatHistory role=AI (jawaban)
+  4. Update chat.updatedAt
+end note
+
+:Kirim event "done"\n{chatId, answer, model, mode, durationMs};
+:Frontend tampilkan jawaban lengkap\n(Markdown + panel Proses + sitasi bisa diklik);
+stop
+@enduml
+
+' ============================================================
+' 8. ALUR MANAJEMEN PROFIL
+' ============================================================
+@startuml FC-08-Profile
+title FC-08: Alur Manajemen Profil (5 Tab)\nGET/PATCH/DELETE /api/profile + Personalisasi + Akun
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+
+split
+partition "GET — Lihat Profil" {
+  :Baca cookie token;
+  if (Token tidak ada?) then (Ya)
+    :HTTP 401;
+    stop
+  endif
+  :verifyToken → findUnique user;
+  if (tier = FREE?) then (Ya)
+    :Cek transaksi PENDING di DB;
+    if (Ada PENDING?) then (Ya)
+      :Cek status ke Midtrans CoreAPI;
+      if (Status settlement / capture?) then (Ya)
+        :Upgrade user ke PRO\n(atomic DB transaction);
+      endif
+    endif
+  endif
+  :Kembalikan HTTP 200\ndata profil user;
+}
+
+split again
+partition "PATCH — Update Profil" {
+  :Baca cookie token;
+  if (Token tidak ada?) then (Ya)
+    :HTTP 401;
+    stop
+  endif
+  :verifyToken → findUnique user;
+  :Kumpulkan field yang ingin diupdate\n(name, email, avatarUrl\nnewPassword, personalContext);
+  if (avatarUrl tidak diawali http?) then (Ya)
+    :HTTP 400 (cegah XSS);
+    stop
+  endif
+  if (newPassword ada?) then (Ya)
+    if (currentPassword tidak ada?) then (Ya)
+      :HTTP 400;
+      stop
+    endif
+    :bcrypt.compare currentPassword;
+    if (Tidak cocok?) then (Ya)
+      :HTTP 401;
+      stop
+    endif
+    :Hash password baru;
+  endif
+  if (personalContext > 500 char?) then (Ya)
+    :HTTP 400;
+    stop
+  endif
+  if (Tidak ada field yang berubah?) then (Ya)
+    :HTTP 400;
+    stop
+  endif
+  :prisma.user.update;
+  :HTTP 200 data baru;
+}
+
+split again
+partition "DELETE — Hapus Akun" {
+  :Baca cookie token;
+  if (Token tidak ada?) then (Ya)
+    :HTTP 401;
+    stop
+  endif
+  :verifyToken;
+  :prisma.user.delete\n(cascade: chat, history\ntransaction, PromptUsage);
+  :Clear cookie token;
+  :HTTP 200 "Akun berhasil dihapus";
+}
+
+split again
+partition "Tab Personalisasi (baru, client-only)" {
+  :Pilih 7 preferensi gaya jawaban\n(gaya bahasa, panjang, kutipan\npasal, contoh, langkah praktis, bahasa);
+  :Simpan ke localStorage\n(tanyahukum_chat_prefs);
+  :Dikirim bersama setiap pertanyaan\nke POST /api/chat (lihat FC-07);
+  note right
+    TIDAK disimpan ke database.
+    Server hanya menerima opsi
+    dari whitelist (anti prompt injection).
+  end note
+}
+
+split again
+partition "Tab Akun — Dokumen Legal & Hapus Riwayat (baru)" {
+  :Klik "Kebijakan Privasi" /\n"Syarat & Ketentuan";
+  :Buka /privacy-policy atau\n/terms-of-service di tab baru (ID/EN);
+  :Klik "Hapus Semua Riwayat Chat"\n→ lihat FC-15;
+}
+end split
+stop
+@enduml
+
+' ============================================================
+' 9. ALUR UPLOAD AVATAR
+' ============================================================
+@startuml FC-09-UploadAvatar
+title FC-09: Alur Upload Avatar\nPOST /api/profile/upload
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Frontend kirim FormData\n{file: imageFile};
+:Baca cookie token;
+
+if (Token tidak ada?) then (Ya)
+  :HTTP 401;
+  stop
+endif
+
+:verifyToken → ambil userId;
+:Ambil file dari FormData;
+
+if (File tidak ada?) then (Ya)
+  :HTTP 400;
+  stop
+endif
+
+if (Ukuran file > 2MB?) then (Ya)
+  :HTTP 400 "Maks 2MB";
+  stop
+endif
+
+:Ambil ekstensi file;
+
+if (Ekstensi bukan jpg/jpeg/png/webp?) then (Ya)
+  :HTTP 400;
+  stop
+endif
+
+if (MIME type tidak valid?) then (Ya)
+  :HTTP 400;
+  stop
+endif
+
+:Buat nama file: {userId}.{ext};
+:Konversi file ke Buffer;
+:Upload ke Supabase Storage\nbucket "avatars" (upsert: true);
+
+if (Upload gagal?) then (Ya)
+  :HTTP 500;
+  stop
+endif
+
+:Ambil public URL dari Supabase\n+ timestamp cache-busting;
+:Update avatarUrl di DB\n(prisma.user.update);
+:Kembalikan HTTP 200\n{url, user};
+stop
+@enduml
+
+' ============================================================
+' 10. ALUR PUSAT DATA HUKUM (REGULATIONS)
+' ============================================================
+@startuml FC-10-Regulations
+title FC-10: Alur Pusat Data Hukum\nGET /api/regulations & /api/regulations/[id]
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+
+split
+partition "GET /api/regulations — Daftar Regulasi" {
+  :Ambil query params\n(page, limit, search, category, sortBy, order);
+  :Sanitasi nilai:\n- page: Math.max(1, parseInt || 1)\n- limit: Math.min(100, Math.max(1, ...));
+
+  if (Ada parameter search?) then (Ya)
+    :Simpan ke SearchLog\n(async fire-and-forget, tidak block response);
+  endif
+
+  :Susun whereClause:\n- isActive: true\n- search: OR(title, description) ILIKE\n- category (jika bukan "Semua");
+
+  :Promise.all:\n1. findMany (data)\n2. count (total);
+  :Hitung pagination meta\n(totalPages, currentPage, dll);
+  :Kembalikan HTTP 200\n{data, meta};
+}
+
+split again
+partition "GET /api/regulations/[id] — Detail Regulasi" {
+  :Ambil id dari URL params;
+
+  if (id tidak ada?) then (Ya)
+    :HTTP 400;
+    stop
+  endif
+
+  :findUnique berdasarkan id;
+
+  if (Regulasi tidak ditemukan?) then (Ya)
+    :HTTP 404;
+    stop
+  endif
+
+  :Increment viewCount +1\n(fire-and-forget, tidak block);
+  :Kembalikan HTTP 200\n{data: regulation};
+}
+
+end split
+stop
+@enduml
+
+' ============================================================
+' 11. ALUR DOWNLOAD REGULASI (PROXY)
+' ============================================================
+@startuml FC-11-Download
+title FC-11: Alur Download Dokumen PDF\nGET /api/regulations/download
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna klik tombol Unduh;
+:Frontend kirim GET /api/regulations/download\n?url={supabaseUrl}&name={fileName};
+
+if (Parameter url tidak ada?) then (Ya)
+  :HTTP 400;
+  stop
+endif
+
+:Parse URL yang diterima;
+
+if (URL tidak bisa di-parse?) then (Ya)
+  :HTTP 400 "URL tidak valid";
+  stop
+endif
+
+if (Hostname bukan *.supabase.co?) then (Ya)
+  :HTTP 400 "URL tidak diizinkan"\n(SSRF diblokir);
+  stop
+endif
+
+:Server fetch file dari Supabase\n(server-side, bypass CORS);
+
+if (File tidak ditemukan di storage?) then (Ya)
+  :Teruskan status code upstream\n(HTTP 404 atau lainnya);
+  stop
+endif
+
+:Sanitasi nama file\n(hapus karakter berbahaya);
+:Kembalikan HTTP 200\n+ buffer PDF\n+ Content-Disposition: attachment\n+ Content-Type: application/pdf;
+:Browser otomatis download file;
+stop
+@enduml
+
+' ============================================================
+' 12. ALUR PAYMENT — CHECKOUT & WEBHOOK
+' ============================================================
+@startuml FC-12-Payment
+title FC-12: Alur Payment Upgrade PRO\nPOST /api/payment/checkout\nPOST /api/payment/webhook
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+
+partition "Tahap 1 — Checkout" {
+  :Pengguna klik "Upgrade ke PRO";
+  :Frontend kirim POST /api/payment/checkout\n{userId};
+
+  if (userId tidak ada?) then (Ya)
+    :HTTP 401;
+    stop
+  endif
+
+  :findUnique user berdasarkan userId;
+
+  if (User tidak ditemukan?) then (Ya)
+    :HTTP 404;
+    stop
+  endif
+
+  if (User sudah tier PRO?) then (Ya)
+    :HTTP 400\n"Anda sudah berlangganan PRO";
+    stop
+  endif
+
+  :Generate orderId unik\n(TRX-{timestamp}-{userId[:5]});
+  :Simpan transaksi ke DB\n(status: PENDING, amount: 49900);
+  :Request Snap token ke Midtrans\n(transaction_details, item_details\ncustomer_details);
+  :Update DB dengan paymentUrl\n(redirect_url dari Midtrans);
+  :Kembalikan HTTP 200\n{token, redirect_url};
+  :Frontend buka Midtrans Snap popup;
+  :Pengguna melakukan pembayaran;
+}
+
+partition "Tahap 2 — Webhook Notifikasi" {
+  :Midtrans kirim POST /api/payment/webhook\n(order_id, transaction_status\nfraud_status, signature_key);
+
+  if (Mode sandbox?) then (Ya)
+    :Lewati validasi signature\n(sandbox bypass);
+  else (Production)
+    :Hitung SHA512 signature\n(orderId + statusCode + amount + serverKey);
+    if (Signature tidak cocok?) then (Ya)
+      :HTTP 403 "Invalid Signature";
+      stop
+    endif
+  endif
+
+  :Mapping status Midtrans → internal:
+  note right
+    capture/settlement → SUCCESS
+    fraud=challenge → PENDING
+    cancel/deny/expire → FAILED
+  end note
+
+  :findUnique transaksi berdasarkan orderId;
+
+  if (Transaksi tidak ada di DB?) then (Ya)
+    :HTTP 404;
+    stop
+  endif
+
+  if (Status sudah SUCCESS?) then (Ya)
+    :HTTP 200 "Already processed"\n(idempotency);
+    stop
+  endif
+
+  if (finalStatus = SUCCESS?) then (Ya)
+    :Atomic DB transaction:
+    note right
+      1. Update transaksi → SUCCESS
+      2. Update user → tier: PRO
+                     promptLimit: 0
+    end note
+  else (FAILED / PENDING)
+    :Update transaksi → finalStatus;
+  endif
+
+  :HTTP 200 "OK";
+}
+
+partition "Self-Healing (Backup)" {
+  :Jika webhook gagal/terlambat,\nsaat user GET /api/profile:;
+  :Cek transaksi PENDING di DB;
+  if (Ada PENDING?) then (Ya)
+    :Cek status ke Midtrans CoreAPI;
+    if (Status settlement/capture?) then (Ya)
+      :Atomic upgrade user ke PRO\n(sama seperti webhook);
+    endif
+  endif
+}
+stop
+@enduml
+
+' ============================================================
+' 13. ALUR DASHBOARD USER
+' ============================================================
+@startuml FC-13-Dashboard
+title FC-13: Alur Dashboard\nGET /api/dashboard
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna membuka halaman Dashboard;
+:Kirim GET /api/dashboard;
+:Verifikasi sesi (getSession);
+
+if (Tidak ada sesi?) then (Ya)
+  :HTTP 401;
+  stop
+endif
+
+if (Cache masih valid?\n(< 30 detik)) then (Ya)
+  :Kembalikan data dari cache\n(in-memory, tanpa query DB);
+  stop
+endif
+
+:Jalankan 6 query paralel (Promise.all):
+note right
+  1. user.count()
+  2. chatHistory.count (hari ini, WIB)
+  3. regulation.count()
+  4. searchLog.count (hari ini)
+  5. regulation.findMany (top 10 viewCount)
+  6. trendingIssue.findMany (3 terbaru)
+end note
+
+:groupBy searchLog per tanggal\n(30 hari terakhir);
+:Kalkulasi tren pencarian per hari;
+:Format popularDocs\n(name = title, views = viewCount);
+:Susun response data;
+:Simpan ke cache (TTL 30 detik);
+:Kembalikan HTTP 200\n{summary, dokumen_terpopuler\nisu_terkini, tren_pencarian};
+stop
+@enduml
+
+' ============================================================
+' 14. ALUR ADMIN — MANAJEMEN PENGGUNA & REGULASI
+' ============================================================
+@startuml FC-14-Admin
+title FC-14: Alur Admin Panel\n(Dilindungi Middleware — Role ADMIN)
+
+skinparam ActivityBackgroundColor #FFF3E0
+skinparam ActivityBorderColor #e67e22
+skinparam ArrowColor #e67e22
+skinparam ActivityStartColor #e67e22
+skinparam ActivityEndColor #c0392b
+
+start
+:Request masuk ke /api/admin/*;
+:Middleware verifikasi JWT + role ADMIN\n(lihat FC-06);
+
+if (Tidak authorized?) then (Ya)
+  :HTTP 401 / 403;
+  stop
+endif
+
+split
+partition "Manajemen Pengguna" {
+  :GET /api/admin/users\n→ Daftar semua user + statistik\n(chat hari ini, last active);
+  split
+    :POST /api/admin/users\n→ Buat user manual\n(hash password, simpan ke DB);
+  split again
+    :PATCH /api/admin/users/[id]\n→ Update tier/role/limit user;
+  split again
+    :DELETE /api/admin/users/[id]\n→ Hapus user (cascade data);
+  end split
+}
+
+split again
+partition "Manajemen Regulasi" {
+  :GET /api/admin/regulations\n→ Daftar semua regulasi\n(termasuk nonaktif);
+  split
+    :POST /api/admin/regulations/upload\n→ Upload PDF ke Supabase Storage\n"legal-documents" bucket\nSimpan metadata ke DB;
+  split again
+    :POST /api/admin/regulations\n→ Tambah regulasi baru (manual);
+  split again
+    :PATCH /api/admin/regulations/[id]\n→ Edit judul/kategori/status aktif;
+  split again
+    :DELETE /api/admin/regulations/[id]\n→ Hapus regulasi;
+  end split
+}
+
+split again
+partition "Manajemen Isu Terkini" {
+  :GET /api/admin/trending\n→ Daftar isu terkini;
+  split
+    :POST /api/admin/trending\n→ Tambah isu baru;
+  split again
+    :PATCH /api/admin/trending/[id]\n→ Edit isu;
+  split again
+    :DELETE /api/admin/trending/[id]\n→ Hapus isu;
+  end split
+}
+
+split again
+partition "Analitik & Logs" {
+  :GET /api/admin/dashboard/stats\n→ Statistik lengkap:\n(user, regulasi, chat, storage\npertumbuhan mingguan\ndistribusi kategori & tier);
+  :GET /api/admin/search-logs\n→ Log semua pencarian user;
+}
+end split
+stop
+@enduml
+
+' ============================================================
+' 15. ALUR KESELURUHAN SISTEM (OVERVIEW)
+' ============================================================
+@startuml FC-00-SystemOverview
+title FC-00: Alur Keseluruhan Sistem TanyaHukum
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna mengakses TanyaHukum;
+
+if (Sudah login?\n(ada JWT cookie)) then (Tidak)
+  split
+    :Register Email/Password\n→ FC-01;
+  split again
+    :Login Email/Password\n→ FC-02;
+  split again
+    :Login Google OAuth\n→ FC-03;
+  split again
+    :Baca Kebijakan Privasi /\nSyarat & Ketentuan (ID/EN)\n(tanpa login, Guest);
+  end split
+endif
+
+:Pengguna masuk ke aplikasi\n(tier: FREE atau PRO);
+
+split
+partition "Chatbot Hukum (Fitur Utama)" {
+  :Pilih model & mode AI\n(5 model x Kilat/Berpikir);
+  :Ajukan pertanyaan hukum\n→ FC-07 (RAG Pipeline, streaming);
+  :Terima jawaban AI (bertahap)\ndengan sumber dokumen bisa diklik;
+  if (Ingin hentikan jawaban?) then (Ya)
+    :Tekan Stop → FC-16\n(bisa Edit & kirim ulang);
+  endif
+  if (Kuota harian habis\n(FREE user)?) then (Ya)
+    :Prompt upgrade ke PRO\n→ FC-12;
+  endif
+}
+
+split again
+partition "Pusat Data Hukum" {
+  :Cari & filter regulasi\n→ FC-10;
+  :Lihat detail regulasi\n(viewCount +1);
+  :Download PDF\n→ FC-11 (proxy server);
+}
+
+split again
+partition "Dashboard" {
+  :Lihat statistik platform\n→ FC-13;
+  :Lihat dokumen populer\n& isu terkini;
+}
+
+split again
+partition "Akun & Profil" {
+  :Edit profil, ganti password\n→ FC-08;
+  :Upload foto avatar\n→ FC-09;
+  :Atur Personalisasi gaya jawaban AI\n(disimpan di browser);
+  :Hapus Semua Riwayat Chat\n→ FC-15;
+  :Baca Kebijakan Privasi /\nSyarat & Ketentuan;
+  if (Lupa password?) then (Ya)
+    :Reset via email\n→ FC-04;
+  endif
+  :Logout\n→ FC-05;
+}
+
+split again
+partition "Pembayaran (PRO)" {
+  :Checkout Midtrans Snap\n→ FC-12;
+  :Webhook otomatis\nupgrade ke PRO;
+}
+end split
+
+if (Role = ADMIN?) then (Ya)
+  :Akses Admin Panel\n→ FC-14;
+  :Kelola user, regulasi\nisu terkini, lihat analitik;
+endif
+
+stop
+@enduml
+
+' ============================================================
+' 15. ALUR HAPUS SEMUA RIWAYAT CHAT (BARU — 16 Okt 2026)
+' ============================================================
+@startuml FC-15-DeleteAllHistory
+title FC-15: Alur Hapus Semua Riwayat Chat\nDELETE /api/chat/history (konfirmasi 2 langkah)
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna buka Profil > Akun;
+:Klik "Hapus Semua Riwayat Chat";
+:Tampil dialog langkah 1\n(penjelasan konsekuensi);
+
+if (Klik "Batal"?) then (Ya)
+  stop
+endif
+
+:Klik "Lanjutkan";
+:Tampil dialog langkah 2\n(input teks, placeholder "HAPUS");
+:Pengguna mengetik konfirmasi;
+
+if (Teks ketikan = "HAPUS"\npersis?) then (Tidak)
+  :Tombol konfirmasi tetap nonaktif;
+  stop
+endif
+
+:Klik tombol konfirmasi akhir;
+:Frontend kirim DELETE /api/chat/history\n{confirm: "HAPUS"};
+
+:Verifikasi sesi (getSession);
+if (Sesi tidak ada?) then (Ya)
+  :Kembalikan HTTP 401;
+  stop
+endif
+
+if (rateLimit(userId, 3/menit,\n"chat-delete-all") terlampaui?) then (Ya)
+  :Kembalikan HTTP 429;
+  stop
+endif
+
+:Parse body JSON;
+if (body.confirm !== "HAPUS"?) then (Ya)
+  :Kembalikan HTTP 400\n"Konfirmasi tidak valid.";
+  stop
+endif
+
+:prisma.chat.deleteMany({where: {userId}});
+note right
+  Cascade delete: seluruh ChatHistory
+  ikut terhapus otomatis.
+  PromptUsage TIDAK ikut terhapus
+  -> kuota harian TIDAK kembali.
+  Akun, profil, langganan tetap aman.
+end note
+
+:Kembalikan HTTP 200\n{success: true, deletedChats: n};
+:Frontend kosongkan sidebar riwayat\ntampilkan "N percakapan telah dihapus";
+stop
+@enduml
+
+' ============================================================
+' 16. ALUR STOP & EDIT PERTANYAAN (BARU — 16 Okt 2026)
+' ============================================================
+@startuml FC-16-StopEdit
+title FC-16: Alur Hentikan Jawaban (Stop) & Edit Pertanyaan\nAbortController pada POST /api/chat {stream:true}
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:AI sedang menulis jawaban (streaming);
+:Tombol Kirim berubah jadi tombol Stop;
+
+if (Pengguna klik Stop?) then (Tidak)
+  :Jawaban selesai normal,\ntersimpan ke riwayat (lihat FC-07);
+  stop
+endif
+
+:Frontend panggil reader.cancel();
+:Server: cancelled = true,\nabortController.abort();
+:Request ke Gemini/Groq diputus\n(AbortError ditangkap, bukan error ke user);
+
+if (Jawaban sudah sempat\nditulis sebagian?) then (Ya)
+  :Server catat promptUsage.create\n(kuota tetap terpakai);
+else (belum sempat menulis)
+  :Tidak ada apapun yang dicatat/disimpan;
+endif
+
+:Server tidak memanggil chatHistory.create\n→ riwayat TIDAK tersimpan;
+:Frontend tandai pesan\n"Dihentikan - tidak disimpan";
+:Teks jawaban sebagian tetap\nterlihat di layar (tidak hilang);
+:Tampilkan tombol Edit\npada bubble pertanyaan pengguna;
+
+if (Pengguna klik Edit?) then (Tidak)
+  stop
+endif
+
+:Tampilkan kotak edit\n(isi awal = pertanyaan sebelumnya);
+:Pengguna ubah teks pertanyaan;
+:Klik "Kirim ulang";
+:Hapus pasangan pesan lama\n(yang berstatus dihentikan) dari layar;
+:Kirim ulang sebagai pertanyaan baru\n→ kembali ke FC-07;
+stop
+@enduml
+
+' ============================================================
+' 17. ALUR PERSONALISASI GAYA JAWABAN (BARU — opsional)
+' ============================================================
+@startuml FC-17-Preferences
+title FC-17: Alur Personalisasi Gaya Jawaban AI\nTab Profil > Personalisasi (client-only)
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna buka Profil > Personalisasi;
+:Tampilkan 7 dropdown preferensi:\ngaya bahasa, panjang jawaban, judul & daftar,\nkutipan pasal, contoh penerapan,\nlangkah praktis, bahasa jawaban;
+
+:Pengguna ubah salah satu opsi;
+:Simpan ke localStorage\n(tanyahukum_chat_prefs)\n[tanpa panggilan API];
+:Tampilkan indikator "Tersimpan";
+
+:Pengguna mengajukan pertanyaan baru;
+:Frontend sertakan preferensi\ndi body POST /api/chat {preferences};
+
+:Server: sanitizePreferences(preferences)\n— hanya kunci & nilai dari whitelist diterima;
+
+if (Ada nilai di luar whitelist\n(mis. teks bebas)?) then (Ya)
+  :Nilai tersebut DIABAIKAN\n(anti prompt injection);
+endif
+
+:buildPreferenceInstructions()\n→ disisipkan ke system prompt\n(aturan 1 Keakuratan & aturan 3 Kutipan\nSumber tetap wajib diikuti);
+:Lanjut ke FC-07 (RAG Pipeline)\ndengan prompt yang sudah disesuaikan;
+stop
+@enduml
+
+' ============================================================
+' 18. ACTIVITY CHATBOT (G-20) — pengganti PlantUML untuk 2.98
+' ============================================================
+@startuml ACT-01-ChatbotActivity
+title G-20: Activity Diagram — Alur Chatbot (swimlane)\nversi PlantUML, pengganti diagram non-PlantUML tim (Gambar 2.98)
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+skinparam PartitionBackgroundColor #FDEBD0
+skinparam PartitionBorderColor #e67e22
+
+|Pengguna|
+start
+:Buka halaman Chatbot;
+:Pilih model & mode\n(5 model x Kilat/Berpikir);
+:Ketik pertanyaan hukum;
+:Klik Kirim;
+
+|Sistem|
+:Verifikasi sesi & rate limit\n(15 req/menit);
+:Cek kuota harian\n(PromptUsage FREE: 10/hari);
+if (Kuota habis?) then (Ya)
+  :Kirim event error\n(limitReached);
+  |Pengguna|
+  :Lihat pesan batas tercapai;
+  stop
+endif
+
+:Retrieval dokumen\n(embedding + Pinecone topK 50\n+ saring noise);
+:Susun prompt\n(+ personalisasi bila ada);
+:Panggil model sesuai mode\n(Gemini atau Groq);
+
+if (Model gagal sebelum menulis\n& ada cadangan?) then (Ya)
+  :Fallback ke model berikutnya\n(rantai Gemini);
+endif
+
+:Stream jawaban\n(step, sources, model, thinking, text);
+
+|Pengguna|
+:Lihat jawaban muncul bertahap\n+ panel Proses;
+
+fork
+  :Tunggu sampai selesai;
+fork again
+  if (Klik Stop?) then (Ya)
+    |Sistem|
+    :Abort stream\n(AbortController);
+    if (Sudah ada teks tertulis?) then (Ya)
+      :Catat PromptUsage\n(kuota tetap terpakai);
+    endif
+    :Tidak simpan ke riwayat\n("Dihentikan · tidak disimpan");
+    |Pengguna|
+    :Lihat tombol Edit\npada pertanyaan;
+    stop
+  endif
+end fork
+
+|Sistem|
+:Simpan Chat + ChatHistory\n+ PromptUsage;
+:Kirim event done;
+
+|Pengguna|
+:Baca jawaban lengkap\ndengan sitasi [1][2][3];
+:(Opsional) klik sitasi,\nSalin, atau Ulangi;
+stop
+@enduml
+
+' ============================================================
+' 19. USER FLOW (G-21) — pengganti PlantUML untuk 2.15
+' ============================================================
+@startuml ACT-02-UserFlow
+title G-21: User Flow — Alur Pengguna Menyeluruh (swimlane)\nversi PlantUML, pengganti diagram Figma/draw.io tim (Gambar 2.15)
+
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+skinparam PartitionBackgroundColor #D5F5E3
+skinparam PartitionBorderColor #27ae60
+
+start
+:Login / Register;
+
+split
+  -[#2f6fed]->
+  :Masuk ke Chatbot;
+  :Pilih model & mode AI;
+  :Ajukan pertanyaan;
+  if (Ingin berhenti di tengah jawaban?) then (Ya)
+    :Klik Stop;
+    :Edit pertanyaan (opsional);
+  else (Tidak)
+    :Baca jawaban + sitasi;
+  endif
+split again
+  -[#27ae60]->
+  :Masuk ke Profil;
+  split
+    -[#27ae60]->
+    :Tab Profile\n(lihat/ubah data diri);
+  split again
+    :Tab Personalisasi\n(atur gaya jawaban AI,\ntersimpan di localStorage);
+  split again
+    :Tab Tampilan\n(tema terang/gelap);
+  split again
+    :Tab Keamanan\n(ubah password);
+  split again
+    :Tab Akun;
+    split
+      -[#e67e22]->
+      :Baca Kebijakan Privasi\n/ Syarat & Ketentuan;
+    split again
+      :Hapus Semua Riwayat Chat\n(konfirmasi 2 langkah,\nketik "HAPUS");
+    end split
+  end split
+split again
+  -[#8e44ad]->
+  :Masuk ke Pusat Data Hukum\n/ Dashboard Statistik;
+end split
+
+:Kembali ke Chatbot\natau Logout;
+stop
+@enduml

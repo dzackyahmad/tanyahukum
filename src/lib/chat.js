@@ -1,3 +1,6 @@
+import { clearProcessCache } from "./processCache";
+import { loadPreferences } from "@/lib/chatPreferences";
+
 // ==============================
 // STORAGE KEY (Legacy & Session)
 // ==============================
@@ -80,11 +83,22 @@ export async function deleteChat(chatId) {
 // Membaca event NDJSON dari /api/chat ({ stream: true }) dan meneruskannya ke onEvent.
 // Error sebelum stream dimulai (401/403/429/...) tetap berupa JSON → dilempar seperti sendMessage.
 // ==============================
-export async function sendMessageStream({ message, chatId, onEvent }) {
+export async function sendMessageStream({ message, chatId, mode, onEvent, signal }) {
+  try {
+    return await readChatStream({ message, chatId, mode, onEvent, signal });
+  } catch (err) {
+    // Tombol Stop membatalkan request → tandai sebagai "dihentikan", bukan error
+    if (err?.name === "AbortError" || signal?.aborted) throw { aborted: true };
+    throw err;
+  }
+}
+
+async function readChatStream({ message, chatId, mode, onEvent, signal }) {
   const res = await fetch("/api/chat", {
+    signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, chatId, stream: true }),
+    body: JSON.stringify({ message, chatId, mode, preferences: loadPreferences(), stream: true }),
   });
 
   const contentType = res.headers.get("content-type") || "";
@@ -144,5 +158,25 @@ export async function sendMessage({ message, userId, chatId }) {
     throw data;
   }
 
+  return data;
+}
+
+// ==============================
+// DELETE ALL CHATS (BACKEND) — dipanggil dari Profil > Akun setelah konfirmasi 2 langkah
+// ==============================
+export async function deleteAllChats() {
+  const res = await fetch("/api/chat/history", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: "HAPUS" }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Gagal menghapus riwayat chat");
+
+  // Bersihkan state lokal: chat aktif & cache proses jawaban di browser
+  localStorage.removeItem(ACTIVE_KEY);
+  clearProcessCache();
+  window.dispatchEvent(new Event("load-conversation"));
+  window.dispatchEvent(new Event("refresh-chats"));
   return data;
 }

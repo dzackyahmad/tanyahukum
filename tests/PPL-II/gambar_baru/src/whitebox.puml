@@ -1,0 +1,1036 @@
+'==============================================================
+' WHITEBOX TESTING — CONTROL FLOW DIAGRAMS
+' Berdasarkan WHITEBOX_TESTING_REPORT_FINAL.md
+' CC = Cyclomatic Complexity | Setiap diamond = titik keputusan
+'==============================================================
+
+' ============================================================
+' WB-01: POST /api/auth/login — CC=9
+' ============================================================
+@startuml WB-01-Login
+title WB-01: Control Flow — POST /api/auth/login\nCC=19 (ESLint, diperbarui) | Basis diagram disederhanakan dari && / || majemuk
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B4: Rate limit IP\n(5/menit, scope "login")?) then (Ya)
+  :HTTP 429; <<#FADBD8>>
+  stop
+endif
+if (B5: Body bukan JSON?) then (Ya)
+  :HTTP 400 - body tidak valid; <<#FADBD8>>
+  stop
+endif
+if (B1: Tipe bukan string?) then (Ya)
+  :HTTP 400 - input tidak valid; <<#FADBD8>>
+  stop
+endif
+if (B2: Email kosong / regex gagal?) then (Ya)
+  :HTTP 400 - format email; <<#FADBD8>>
+  stop
+endif
+if (B3: Password < 8 karakter?) then (Ya)
+  :HTTP 400 - password minimal 8; <<#FADBD8>>
+  stop
+endif
+if (B6: Validasi gagal?) then (Ya)
+  :HTTP 400; <<#FADBD8>>
+  stop
+endif
+:Normalisasi email (lowercase);
+if (B7 BARU: Rate limit per email\n(10/menit, scope "login-email")?) then (Ya)
+  :HTTP 429; <<#FADBD8>>
+  stop
+endif
+:DB findUnique(email)\nbcrypt.compare(password, hash) - anti-timing attack;
+if (B8 BARU: Gagal DAN user ada\nDAN password punya spasi di awal/akhir?) then (Ya)
+  :bcrypt.compare(password.trim(), hash);
+  note right
+    Perbaikan BUG-07: registrasi
+    menyimpan password ter-trim.
+  end note
+endif
+if (B9: user null ATAU password\n(trim) tidak cocok?) then (Ya)
+  :HTTP 401 - email atau password salah; <<#FADBD8>>
+  stop
+endif
+:createToken - set Cookie HttpOnly 7 hari;
+:HTTP 200 + data user; <<#D5F5E3>>
+note right
+  CC=19 juga menghitung operator && / || / ??
+  di dalam kondisi majemuk (B8, B9, dan
+  "user?.passwordHash ?? dummyHash"),
+  yang di diagram ini disatukan jadi 1 diamond
+  agar tetap mudah dibaca.
+end note
+stop
+@enduml
+
+' ============================================================
+' WB-02: POST /api/auth/register — CC=9
+' ============================================================
+@startuml WB-02-Register
+title WB-02: Control Flow — POST /api/auth/register\nCC=9 | Branch Coverage=100% | Basis Path=9
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Rate limit IP?) then (Ya)
+  :HTTP 429; <<#FADBD8>>
+  stop
+endif
+:normalisasi email - trim + toLowerCase;
+if (B2: Email atau password kosong?) then (Ya)
+  :HTTP 400 - field wajib diisi; <<#FADBD8>>
+  stop
+endif
+if (B3: Format email tidak valid?) then (Ya)
+  :HTTP 400 - format email; <<#FADBD8>>
+  stop
+endif
+if (B4: Password < 8 karakter?) then (Ya)
+  :HTTP 400 - password minimal 8; <<#FADBD8>>
+  stop
+endif
+:DB findUnique(email);
+if (B5: Email sudah terdaftar?) then (Ya)
+  if (B6: authProvider = GOOGLE?) then (Ya)
+    :HTTP 409 - gunakan tombol Google; <<#FADBD8>>
+    stop
+  else (Tidak)
+    :HTTP 409 - email sudah digunakan; <<#FADBD8>>
+    stop
+  endif
+endif
+:bcrypt.hash(password, 10)\nDB user.create;
+if (B7: Prisma P2002 race condition?) then (Ya)
+  :HTTP 409; <<#FADBD8>>
+  stop
+endif
+:HTTP 201 - Registrasi berhasil; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-03: POST /api/auth/google — CC=5
+' ============================================================
+@startuml WB-03-GoogleOAuth
+title WB-03: Control Flow — POST /api/auth/google\nCC=5 | Branch Coverage=100% | Basis Path=5
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: credentialToken tidak ada?) then (Ya)
+  :HTTP 400 - token tidak ditemukan; <<#FADBD8>>
+  stop
+endif
+:verifyIdToken ke Google\nambil payload;
+if (B2: Email tidak ada di payload?) then (Ya)
+  :HTTP 400 - gagal dapat email; <<#FADBD8>>
+  stop
+endif
+:DB findUnique(email);
+if (B3: User belum terdaftar?) then (Ya)
+  :DB user.create\nauthProvider=GOOGLE, tier=FREE;
+endif
+:createToken - set Cookie HttpOnly;
+:HTTP 200 + data user; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-04: POST /api/auth/forgot-password — CC=7
+' ============================================================
+@startuml WB-04-ForgotPassword
+title WB-04: Control Flow — POST /api/auth/forgot-password\nCC=7 | Branch Coverage=100% | Basis Path=7
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Rate limit - maks 3/15 menit?) then (Ya)
+  :HTTP 429; <<#FADBD8>>
+  stop
+endif
+if (B2: Email kosong?) then (Ya)
+  :HTTP 400; <<#FADBD8>>
+  stop
+endif
+if (B3: Format email tidak valid?) then (Ya)
+  :HTTP 400; <<#FADBD8>>
+  stop
+endif
+:DB findUnique(email);
+if (B4: User tidak ditemukan?) then (Ya)
+  :HTTP 200 - generik\nanti user-enumeration; <<#D5F5E3>>
+  stop
+endif
+:generate token randomBytes 32\nhash SHA-256\nDB update resetToken + expiry\nkirim email reset;
+if (B5: Mode development?) then (Ya)
+  :HTTP 200 + resetUrl; <<#D5F5E3>>
+else (Production)
+  :HTTP 200 - pesan generik; <<#D5F5E3>>
+endif
+stop
+@enduml
+
+' ============================================================
+' WB-05: POST /api/auth/reset-password — CC=5
+' ============================================================
+@startuml WB-05-ResetPassword
+title WB-05: Control Flow — POST /api/auth/reset-password\nCC=5 | Branch Coverage=100% | Basis Path=6
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Token atau password kosong?) then (Ya)
+  :HTTP 400; <<#FADBD8>>
+  stop
+endif
+if (B2: Password < 8 karakter?) then (Ya)
+  :HTTP 400; <<#FADBD8>>
+  stop
+endif
+:hash token dari URL - SHA-256\nDB findFirst hashedToken + expiry > now;
+if (B3: Token tidak valid atau expired?) then (Ya)
+  :HTTP 400 - token tidak valid; <<#FADBD8>>
+  stop
+endif
+:bcrypt.hash newPassword salt 12\nDB update passwordHash\nhapus resetToken - one-time use;
+:HTTP 200 - Password berhasil diubah; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-06: POST /api/logout — CC=3
+' ============================================================
+@startuml WB-06-Logout
+title WB-06: Control Flow — POST /api/logout\nCC=3 | Branch Coverage=100% | Basis Path=3
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+:supabase.auth.getUser;
+if (B1: Ada sesi Supabase aktif?) then (Ya)
+  :supabase.auth.signOut global;
+endif
+:Set-Cookie token kosong - expires epoch 0\nhapus JWT cookie;
+:HTTP 303 redirect ke login; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-07: GET /api/profile — CC=7
+' ============================================================
+@startuml WB-07-GetProfile
+title WB-07: Control Flow — GET /api/profile\nCC=7 | Branch Coverage=100% | Basis Path=7
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Token tidak ada?) then (Ya)
+  :HTTP 401; <<#FADBD8>>
+  stop
+endif
+:verifyToken\nDB findUnique userId;
+if (B2: User tidak ditemukan?) then (Ya)
+  :HTTP 404; <<#FADBD8>>
+  stop
+endif
+if (B3: Tier = FREE?) then (Ya)
+  :DB findFirst transaksi PENDING;
+  if (B4: Ada pendingTx?) then (Ya)
+    :Midtrans CoreAPI.status orderId;
+    if (B5: Status settlement atau capture?) then (Ya)
+      :DB atomic:\nupdate tx SUCCESS\nupdate user tier=PRO;
+    endif
+  endif
+endif
+:HTTP 200 - data profil user; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-08: PATCH /api/profile — CC=11
+' ============================================================
+@startuml WB-08-PatchProfile
+title WB-08: Control Flow — PATCH /api/profile\nCC=11 | Branch Coverage=100% | Basis Path=10
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Token tidak ada?) then (Ya)
+  :HTTP 401; <<#FADBD8>>
+  stop
+endif
+:verifyToken\nDB findUnique userId;
+if (B2: User tidak ditemukan?) then (Ya)
+  :HTTP 404; <<#FADBD8>>
+  stop
+endif
+:susun updateData = {};
+if (B3: avatarUrl dikirim?) then (Ya)
+  if (B4: avatarUrl tidak diawali http?) then (Ya)
+    :HTTP 400 - URL Avatar tidak valid; <<#FADBD8>>
+    stop
+  endif
+endif
+if (B5: newPassword dikirim?) then (Ya)
+  if (B6: currentPassword tidak ada?) then (Ya)
+    :HTTP 400 - password lama wajib; <<#FADBD8>>
+    stop
+  endif
+  :bcrypt.compare currentPassword;
+  if (B7: Password lama salah?) then (Ya)
+    :HTTP 401; <<#FADBD8>>
+    stop
+  endif
+  if (B8: Password baru < 8?) then (Ya)
+    :HTTP 400; <<#FADBD8>>
+    stop
+  endif
+  :hash password baru;
+endif
+if (B9: personalContext dikirim?) then (Ya)
+  if (B10: personalContext > 500 char?) then (Ya)
+    :HTTP 400 - maks 500 karakter; <<#FADBD8>>
+    stop
+  endif
+endif
+if (B11: updateData kosong?) then (Ya)
+  :HTTP 400 - tidak ada perubahan; <<#FADBD8>>
+  stop
+endif
+:DB user.update updateData;
+:HTTP 200 - profil diperbarui; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-09: DELETE /api/profile — CC=3
+' ============================================================
+@startuml WB-09-DeleteProfile
+title WB-09: Control Flow — DELETE /api/profile\nCC=3 | Branch Coverage=100% | Basis Path=3
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Token tidak ada?) then (Ya)
+  :HTTP 401; <<#FADBD8>>
+  stop
+endif
+:verifyToken\nDB user.delete cascade\nChat, ChatHistory, Transaction, SearchLog;
+:Set-Cookie token kosong - expires 0;
+:HTTP 200 - Akun berhasil dihapus; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-10: POST /api/chat — CC=11
+' ============================================================
+@startuml WB-10-PostChat
+title WB-10: Control Flow — POST /api/chat (handler utama)\nCC=25 (ESLint, diperbarui) | Dipecah 2 diagram: lihat WB-10b untuk mode streaming
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Tidak ada sesi JWT?) then (Ya)
+  :HTTP 401; <<#FADBD8>>
+  stop
+endif
+:body = await req.json();
+if (B2: message kosong?) then (Ya)
+  :HTTP 400; <<#FADBD8>>
+  stop
+endif
+if (B3: message bukan string\nATAU > 5000 karakter?) then (Ya)
+  :HTTP 400; <<#FADBD8>>
+  stop
+endif
+if (B4: rateLimit(userId, 15/menit, "chat")\nterlampaui?) then (Ya)
+  :HTTP 429; <<#FADBD8>>
+  stop
+endif
+:mode = CHAT_MODES.includes(body.mode)\n? body.mode : "deep";
+:preferences = sanitizePreferences(body.preferences)\n(whitelist, anti prompt injection);
+if (B5: chatId ada tapi\nbukan string?) then (Ya)
+  :HTTP 404; <<#FADBD8>>
+  stop
+endif
+:Baca DB paralel (Promise.all):\nexistingChat, user, chatsTodayCount\n(= count PromptUsage hari ini);
+if (B6: chatId ada tapi bukan\nmilik user?) then (Ya)
+  :HTTP 404; <<#FADBD8>>
+  stop
+endif
+if (B7: user tidak ditemukan?) then (Ya)
+  :HTTP 404; <<#FADBD8>>
+  stop
+endif
+if (B8: tier=FREE DAN\nchatsTodayCount >= promptLimit?) then (Ya)
+  :HTTP 403 - limitReached: true; <<#FADBD8>>
+  stop
+endif
+
+if (B9: body.stream === true?) then (Ya)
+  :streamChatResponse(...)\n→ lihat WB-10b (NDJSON streaming); <<#D6EAF8>>
+  stop
+else (Tidak - mode JSON lama)
+endif
+
+:retrieveDocuments(message)\n(Voyage embed + Pinecone topK 50);
+repeat :Ambil model berikutnya\ndari MODEL_CHAIN;
+  :createLlm(model).invoke(\n[SystemMessage, HumanMessage]);
+  if (B10: LLM error DAN isQuotaError\nDAN masih ada model lain?) then (Ya)
+    :lanjut ke model berikutnya;
+  elseif (B11: LLM error DAN isQuotaError?) then (Ya)
+    :HTTP 429 - Kuota AI habis; <<#FADBD8>>
+    stop
+  elseif (B12: LLM error lain?) then (Ya)
+    :lempar exception → HTTP 500; <<#FADBD8>>
+    stop
+  else (Berhasil)
+    :break;
+  endif
+repeat while (Model berikutnya\ntersedia?) is (Ya) not (Tidak, berhasil)
+
+:saveExchange(): chat.create/findUnique\n+ simpan ChatHistory USER & AI;
+if (B13: chatSession tidak\nditemukan?) then (Ya)
+  :HTTP 404; <<#FADBD8>>
+  stop
+endif
+:HTTP 200 - {answer, chatId}; <<#D5F5E3>>
+note right
+  CC=25 juga menghitung operator && / ?? di
+  kondisi majemuk dan di helper (modelChainFor,
+  isQuotaError, isTransientError). Beberapa
+  diamond di atas mewakili beberapa titik
+  keputusan ESLint sekaligus.
+end note
+stop
+@enduml
+
+' ============================================================
+' WB-10b: streamChatResponse (ReadableStream.start) — bagian
+' dari POST /api/chat mode stream:true — CC=25 (ESLint)
+' ============================================================
+@startuml WB-10b-StreamChatResponse
+title WB-10b: Control Flow — streamChatResponse (mode streaming)\nCC=25 (ESLint) | Dipanggil dari WB-10 saat body.stream===true
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+:Kirim event "step" {search, active};
+:retrieveDocuments(message)\n(Voyage embed + Pinecone topK 50\n+ cleanMatches noise filter);
+if (B1: cancelled (Stop ditekan)\nsebelum AI dipanggil?) then (Ya)
+  :return - tidak ada yang disimpan;
+  stop
+endif
+:Kirim event "sources" + "step" {search, done};
+:bangun systemPrompt (konteks\n+ personalContext + preferences);
+
+repeat :Ambil model berikutnya\ndari modelChainFor(mode);
+  :Kirim event "model" {model, provider,\nmode, fallback: i>0};
+  :stream(systemPrompt, message,\nAbortController.signal);
+  if (B2: cancelled saat streaming\nchunk?) then (Ya)
+    :break - keluar loop chunk;
+  elseif (B3: chunk type = thinking?) then (Ya)
+    :kirim event "thinking";
+  else (chunk type = text)
+    :writing = true (jika pertama kali)\nkirim event "text";
+  endif
+
+  if (B4: LLM error DAN cancelled?) then (Ya)
+    :break - dihentikan pengguna,\nbukan error;
+  elseif (B5: LLM error DAN canUseFallback(err)\nDAN !writing DAN masih ada model lain?) then (Ya)
+    :continue - coba model berikutnya\n(fallback=true pada event berikutnya);
+  elseif (B6: LLM error DAN isQuotaError(err)?) then (Ya)
+    :kirim event "error"\n"Kuota AI hari ini telah habis";
+    stop
+  elseif (B7: LLM error lain?) then (Ya)
+    :lempar exception; <<#FADBD8>>
+    stop
+  else (Berhasil, selesai menulis)
+    :usedModel = model; break;
+  endif
+repeat while (Model lain\ntersedia?) is (Ya) not (Tidak)
+
+if (B8: cancelled (Stop ditekan)?) then (Ya)
+  if (B9: answer.trim() tidak kosong\n(sudah sempat menulis)?) then (Ya)
+    :recordUsage(userId)\n→ promptUsage.create;
+  endif
+  :return - TIDAK memanggil\nsaveExchange/chatHistory.create;
+  stop
+endif
+
+if (B10: answer kosong?) then (Ya)
+  :throw "Jawaban AI kosong" → catch luar; <<#FADBD8>>
+  stop
+endif
+
+:saveExchange(): simpan Chat,\nChatHistory USER+AI, Chat.updatedAt;
+if (B11: chatSession tidak\nditemukan?) then (Ya)
+  :kirim event "error"\n"Sesi chat tidak ditemukan";
+  stop
+endif
+:kirim event "step" {write, done};
+:kirim event "done"\n{chatId, answer, model, mode, durationMs}; <<#D5F5E3>>
+note right
+  Tombol Stop memicu ReadableStream.cancel()
+  -> cancelled=true + abortController.abort().
+  Error tak tertangani di luar percabangan ini
+  ditangkap catch terluar -> event "error" generik.
+end note
+stop
+@enduml
+
+' ============================================================
+' WB-11: GET /api/chat — CC=6
+' ============================================================
+@startuml WB-11-GetChat
+title WB-11: Control Flow — GET /api/chat\nCC=6 | Branch Coverage=100% | Basis Path=6
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Tidak ada sesi atau\nuserId != session.userId?) then (Ya)
+  :HTTP 401 - IDOR diblokir; <<#FADBD8>>
+  stop
+endif
+if (B2: type = list?) then (Ya)
+  :DB chat.findMany userId\norderBy updatedAt desc;
+  :HTTP 200 - chats[]; <<#D5F5E3>>
+  stop
+endif
+if (B3: chatId ada di query?) then (Ya)
+  :DB chatHistory.findMany chatId\norderBy createdAt asc;
+  :HTTP 200 - history[]; <<#D5F5E3>>
+  stop
+endif
+:DB chatHistory.findMany userId\nfallback legacy;
+:HTTP 200 - history[]; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-12: PATCH /api/chat — CC=5
+' ============================================================
+@startuml WB-12-PatchChat
+title WB-12: Control Flow — PATCH /api/chat\nCC=5 | Branch Coverage=100% | Basis Path=5
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Tidak ada sesi?) then (Ya)
+  :HTTP 401; <<#FADBD8>>
+  stop
+endif
+if (B2: chatId atau title kosong?) then (Ya)
+  :HTTP 400 - data tidak lengkap; <<#FADBD8>>
+  stop
+endif
+:DB chat.findUnique chatId;
+if (B3: Chat tidak ada atau\nbukan milik user?) then (Ya)
+  :HTTP 403 - Forbidden; <<#FADBD8>>
+  stop
+endif
+:DB chat.update title;
+:HTTP 200 - chat diperbarui; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-13: DELETE /api/chat — CC=5
+' ============================================================
+@startuml WB-13-DeleteChat
+title WB-13: Control Flow — DELETE /api/chat\nCC=5 | Branch Coverage=100% | Basis Path=5
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Tidak ada sesi?) then (Ya)
+  :HTTP 401; <<#FADBD8>>
+  stop
+endif
+if (B2: chatId tidak ada di query?) then (Ya)
+  :HTTP 400 - ID Chat diperlukan; <<#FADBD8>>
+  stop
+endif
+:DB chat.findUnique chatId;
+if (B3: Chat tidak ada atau\nbukan milik user?) then (Ya)
+  :HTTP 403 - Forbidden; <<#FADBD8>>
+  stop
+endif
+:DB chat.delete - cascade ChatHistory;
+:HTTP 200 - chat dihapus; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-14: GET /api/regulations — CC=5
+' ============================================================
+@startuml WB-14-GetRegulations
+title WB-14: Control Flow — GET /api/regulations\nCC=5 | Branch Coverage=100% | Basis Path=6
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+:sanitasi parameter:\npage = Math.max(1, parseInt or 1)\nlimit = Math.min(100, Math.max(1,...));
+if (B1: search ada?) then (Ya)
+  :searchLog.create async fire-and-forget;
+endif
+:whereClause isActive=true;
+if (B2: search ada?) then (Ya)
+  :tambah OR title+description ILIKE;
+endif
+if (B3: category dan bukan Semua?) then (Ya)
+  :tambah filter category;
+endif
+:DB Promise.all findMany + count;
+:hitung totalPages;
+:HTTP 200 - data + meta pagination; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-15: GET /api/regulations/[id] — CC=5
+' ============================================================
+@startuml WB-15-RegulationDetail
+title WB-15: Control Flow — GET /api/regulations/[id]\nCC=5 | Branch Coverage=100% | Basis Path=5
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: id tidak ada?) then (Ya)
+  :HTTP 400 - ID wajib; <<#FADBD8>>
+  stop
+endif
+:DB regulation.findUnique id;
+if (B2: Regulasi tidak ditemukan?) then (Ya)
+  :HTTP 404; <<#FADBD8>>
+  stop
+endif
+:regulation.update viewCount +1\nfire-and-forget - tidak block response;
+if (B3: update viewCount gagal?) then (Ya)
+  :tidak mempengaruhi response;
+endif
+:HTTP 200 - data regulasi; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-16: GET /api/regulations/download — CC=7
+' ============================================================
+@startuml WB-16-DownloadPDF
+title WB-16: Control Flow — GET /api/regulations/download\nCC=7 | Branch Coverage=100% | Basis Path=6
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+:ambil url dan name dari query\nfileName = name atau document.pdf;
+if (B2: fileUrl tidak ada?) then (Ya)
+  :HTTP 400 - URL tidak ditemukan; <<#FADBD8>>
+  stop
+endif
+:parse URL baru;
+if (B4: URL tidak bisa di-parse?) then (Ya)
+  :HTTP 400 - URL tidak valid; <<#FADBD8>>
+  stop
+endif
+if (B3: Hostname bukan supabase.co?) then (Ya)
+  :HTTP 400 - URL tidak diizinkan\nSSRF diblokir; <<#FADBD8>>
+  stop
+endif
+:server-side fetch fileUrl\nbypass CORS browser;
+if (B5: Upstream tidak OK?) then (Ya)
+  :HTTP status upstream; <<#FADBD8>>
+  stop
+endif
+:sanitasi fileName - hapus karakter berbahaya;
+:HTTP 200 - buffer PDF\nContent-Disposition: attachment; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-17: GET /api/dashboard — CC=4
+' ============================================================
+@startuml WB-17-Dashboard
+title WB-17: Control Flow — GET /api/dashboard\nCC=4 | Branch Coverage=100% | Basis Path=4
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Tidak ada sesi?) then (Ya)
+  :HTTP 401; <<#FADBD8>>
+  stop
+endif
+if (B2: Cache valid - TTL < 30 detik?) then (Ya)
+  :HTTP 200 - dari cache\ntanpa query DB; <<#D5F5E3>>
+  stop
+endif
+:hitung batas waktu WIB +07:00\n6 query paralel Promise.all\nproses searchTrends groupBy date;
+:simpan ke cache TTL 30 detik;
+:HTTP 200 - summary + popularDocs\nisu terkini + tren pencarian; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-18: POST /api/payment/checkout — CC=5
+' ============================================================
+@startuml WB-18-Checkout
+title WB-18: Control Flow — POST /api/payment/checkout\nCC=5 | Branch Coverage=100% | Basis Path=5
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: userId tidak ada?) then (Ya)
+  :HTTP 401; <<#FADBD8>>
+  stop
+endif
+:DB user.findUnique userId;
+if (B2: User tidak ditemukan?) then (Ya)
+  :HTTP 404; <<#FADBD8>>
+  stop
+endif
+if (B3: User tier sudah PRO?) then (Ya)
+  :HTTP 400 - sudah berlangganan PRO; <<#FADBD8>>
+  stop
+endif
+:generate orderId TRX-timestamp-userId5\nDB transaction.create PENDING 49900\nMidtrans Snap.createTransaction\nDB transaction.update paymentUrl;
+:HTTP 200 - token + redirect_url; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-19: POST /api/payment/webhook — CC=10
+' ============================================================
+@startuml WB-19-Webhook
+title WB-19: Control Flow — POST /api/payment/webhook\nCC=10 | Branch Coverage=100% | Basis Path=10
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Mode production?) then (Ya)
+  :hitung SHA512 signature;
+  if (B2: Signature tidak cocok?) then (Ya)
+    :HTTP 403 - Invalid Signature; <<#FADBD8>>
+    stop
+  endif
+else (Sandbox)
+  :bypass signature check;
+endif
+:mapping status Midtrans ke internal;
+if (B3: capture atau settlement?) then (Ya)
+  if (B4: fraud=challenge?) then (Ya)
+    :finalStatus = PENDING;
+  else (Tidak)
+    :finalStatus = SUCCESS;
+  endif
+else if (B5: cancel atau deny atau expire?) then (Ya)
+  :finalStatus = FAILED;
+else
+  :finalStatus = PENDING default;
+endif
+:DB transaction.findUnique orderId;
+if (B6: Transaksi tidak ada?) then (Ya)
+  :HTTP 404; <<#FADBD8>>
+  stop
+endif
+if (B7: Status sudah SUCCESS - idempotency?) then (Ya)
+  :HTTP 200 - Already processed; <<#D5F5E3>>
+  stop
+endif
+if (B8: finalStatus = SUCCESS?) then (Ya)
+  :DB atomic:\nupdate tx SUCCESS\nupdate user tier=PRO promptLimit=0;
+else (FAILED atau PENDING)
+  :DB transaction.update finalStatus;
+endif
+:HTTP 200 OK; <<#D5F5E3>>
+stop
+@enduml
+
+' ============================================================
+' WB-20: middleware.js — CC=6
+' ============================================================
+@startuml WB-20-Middleware
+title WB-20: Control Flow — middleware.js (fungsi middleware)\nCC=14 (ESLint, 17 Okt 2026) | cabang tercover 39/40
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+:baca cookie token & pathname;
+if (B1: /api/* dan request mutasi\ndari origin lain? (CSRF)) then (Ya)
+  :HTTP 403 - cross-origin request; <<#FADBD8>>
+  stop
+endif
+if (B2: halaman /admin atau /admin/*?) then (Ya)
+  :getTokenRole(token);
+  if (B3: role bukan ADMIN?) then (Ya)
+    :redirect 307 ke /chatbot; <<#FADBD8>>
+    stop
+  endif
+endif
+if (B4: halaman /dashboard* atau /pusat-data*?\n(BARU)) then (Ya)
+  :hasValidSession(token);
+  if (B5: sesi tidak valid?\n(BARU)) then (Ya)
+    :redirect 307 ke /chatbot; <<#FADBD8>>
+    stop
+  endif
+endif
+if (B6: path /api/admin*?) then (Ya)
+  if (B7: token tidak ada?) then (Ya)
+    :HTTP 401 - Harap login; <<#FADBD8>>
+    stop
+  endif
+  if (B8: JWT_SECRET tidak di-set?) then (Ya)
+    :HTTP 500 - Server config error\nfail-closed; <<#FADBD8>>
+    stop
+  endif
+  if (B9: jwtVerify gagal?\n(catch)) then (Ya)
+    :HTTP 401 - Token tidak valid; <<#FADBD8>>
+    stop
+  endif
+  if (B10: role bukan ADMIN?) then (Ya)
+    :HTTP 403 - Admin access only; <<#FADBD8>>
+    stop
+  endif
+endif
+:set header Cache-Control no-store;
+:NextResponse.next - teruskan request; <<#D5F5E3>>
+note right
+  10 keputusan di gambar → V(G) = 11.
+  ESLint menghitung CC = 14 karena
+  operator &&, || dan ?. di B1, B2 dan
+  pembacaan cookie ikut dihitung.
+  B4–B5 baru (BUG-08, 17 Okt 2026).
+end note
+stop
+@enduml
+
+' ============================================================
+' WB-21: DELETE /api/chat/history (BARU — 16 Okt 2026) — CC=8
+' ============================================================
+@startuml WB-21-DeleteAllHistory
+title WB-21: Control Flow — DELETE /api/chat/history\nCC=8 (ESLint) | Hapus semua riwayat chat (konfirmasi wajib)
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+if (B1: Tidak ada sesi\n(session?.userId kosong)?) then (Ya)
+  :HTTP 401 Unauthorized; <<#FADBD8>>
+  stop
+endif
+if (B2: rateLimit(userId, 3/menit,\n"chat-delete-all") terlampaui?) then (Ya)
+  :HTTP 429; <<#FADBD8>>
+  stop
+endif
+:body = await req.json().catch(() => ({}));
+if (B3: body?.confirm !== "HAPUS"?) then (Ya)
+  :HTTP 400\n"Konfirmasi tidak valid."; <<#FADBD8>>
+  stop
+endif
+:prisma.chat.deleteMany(\n{where: {userId: session.userId}});
+note right
+  Hanya milik sendiri (anti-IDOR):
+  where selalu session.userId,
+  TIDAK pernah dari body/query.
+  Cascade: ChatHistory ikut terhapus.
+  PromptUsage TIDAK ikut terhapus.
+end note
+:HTTP 200 {success: true,\ndeletedChats: count}; <<#D5F5E3>>
+note right
+  catch terluar (try/catch) menangani error
+  database tak terduga -> HTTP 500. Termasuk
+  dalam CC=8 bersama operator ?. dan ?? di atas.
+end note
+stop
+@enduml
+
+' ============================================================
+' WB-22: lib/rateLimit.js — rateLimit() (BARU — opsional)
+' ============================================================
+@startuml WB-22-RateLimit
+title WB-22: Control Flow — lib/rateLimit.js rateLimit()\nPerbaikan BUG-01: jendela waktu tidak pernah reset
+
+skinparam activity {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  DiamondBackgroundColor #FDEBD0
+  DiamondBorderColor #e67e22
+  ArrowColor #2c3e50
+  FontSize 11
+}
+
+start
+:key = "rate_limit_" + scope + "_" + ip/userId;
+:current = rateLimitCache.get(key) ?? 0;
+if (B1: current >= maxRequests?) then (Ya)
+  :return false (Ditolak); <<#FADBD8>>
+  stop
+endif
+:rateLimitCache.set(key, current+1,\n{noUpdateTTL: true}); <<#D5F5E3>>
+note right
+  Perbaikan BUG-01: SEBELUM perbaikan, set()
+  tanpa noUpdateTTL memperpanjang TTL 60 dtk
+  di SETIAP request -> pengguna aktif (jeda
+  <1 menit) tidak pernah di-reset, terblokir
+  permanen setelah N request total.
+  SESUDAH: jendela dihitung sejak request
+  PERTAMA (TC-RL-03 membuktikan reset tetap
+  terjadi walau pengguna terus aktif).
+end note
+:return true (Diizinkan);
+stop
+@enduml
