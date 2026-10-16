@@ -56,3 +56,5 @@ ragas_eval/
 # PPL-II Ragas (virtualenv & cache Python lokal)
 tests/PPL-II/ragas/.venv/
 __pycache__/
+CLAUDE.md
+AGENTS.md
