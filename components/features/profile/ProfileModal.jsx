@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import ProfileCard from "./ProfileCard";
 import { getProfile, updateProfile, logout, deleteAccount } from "@/src/lib/profile";
+import { deleteAllChats } from "@/src/lib/chat";
 import LogoutConfirmModal from "./LogoutConfirmModal";
 import { createPortal } from "react-dom";
 import { useTheme } from "@/components/shared/ThemeProvider";
+import { LEGAL_PATHS } from "@/components/features/legal/legalContent";
+import { PREFERENCE_FIELDS, loadPreferences, savePreferences } from "@/lib/chatPreferences";
 
 export default function ProfileModal({ isOpen, onClose, user }) {
   const [activeTab, setActiveTab] = useState("profile"); // "profile" | "personalisasi" | "keamanan"
@@ -198,7 +201,7 @@ export default function ProfileModal({ isOpen, onClose, user }) {
                 <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
                   <div>
                     <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-1">Personalisasi AI</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Atur bagaimana AI berinteraksi dan memahami kebutuhan Anda.</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Atur cara AI menjawab pertanyaan hukum Anda.</p>
                   </div>
 
                   <SectionPersonalization 
@@ -236,23 +239,13 @@ export default function ProfileModal({ isOpen, onClose, user }) {
               {activeTab === "akun" && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
                   <div>
-                    <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-1">Manajemen Akun</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Kelola pengaturan tingkat lanjut dan status akun Anda.</p>
+                    <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-1">Akun</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Dokumen legal dan pengelolaan data akun Anda.</p>
                   </div>
 
-                  <SectionAccount 
-                    user={user} 
-                    onDelete={async () => {
-                      try {
-                        setLoading(true);
-                        await deleteAccount();
-                      } catch (err) {
-                        setError(err.message);
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                  />
+                  <SectionLegal />
+
+                  <SectionDataAndAccount onDeleteAccount={deleteAccount} />
                 </div>
               )}
 
@@ -337,36 +330,101 @@ function SectionGeneral({ data, onSave, loading }) {
   );
 }
 
+// Personalisasi gaya jawaban AI (disimpan di browser, dikirim bersama setiap pertanyaan)
+// + konteks personal (disimpan di akun).
 function SectionPersonalization({ data, onSave, loading }) {
   const [val, setVal] = useState(data.personalContext);
+  const [prefs, setPrefs] = useState({});
+  const [savedKey, setSavedKey] = useState(null);
 
   useEffect(() => { setVal(data.personalContext); }, [data.personalContext]);
+  useEffect(() => { setPrefs(loadPreferences()); }, []);
+
+  const changePref = (key, value) => {
+    const next = { ...prefs, [key]: value };
+    if (value === "default") delete next[key];
+    setPrefs(next);
+    savePreferences(next);
+    setSavedKey(key);
+    setTimeout(() => setSavedKey((k) => (k === key ? null : k)), 1500);
+  };
+
+  const isCustomized = Object.keys(prefs).length > 0;
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Konteks Personal</label>
-        <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-          Instruksi khusus ini akan diingat oleh AI setiap kali Anda memulai obrolan baru.
+    <div className="space-y-8">
+      <section>
+        <div className="flex items-end justify-between gap-4 mb-3">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Gaya jawaban</h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Berlaku untuk pertanyaan berikutnya. Akurasi dan kutipan sumber tetap dijaga.</p>
+          </div>
+          {isCustomized && (
+            <button
+              type="button"
+              onClick={() => { setPrefs({}); savePreferences({}); }}
+              className="shrink-0 text-xs font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+            >
+              Kembalikan default
+            </button>
+          )}
+        </div>
+        <div className="rounded-2xl border border-gray-200 dark:border-slate-700 divide-y divide-gray-200 dark:divide-slate-700">
+          {PREFERENCE_FIELDS.map((field) => (
+            <div key={field.key} className="flex items-center justify-between gap-4 px-5 py-3.5">
+              <div className="min-w-0">
+                <label htmlFor={`pref-${field.key}`} className="block text-sm font-medium text-gray-900 dark:text-white">{field.label}</label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{field.description}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {savedKey === field.key && <span className="text-[11px] text-emerald-600 dark:text-emerald-400">Tersimpan</span>}
+                <div className="relative">
+                  <select
+                    id={`pref-${field.key}`}
+                    value={prefs[field.key] || "default"}
+                    onChange={(e) => changePref(field.key, e.target.value)}
+                    className="appearance-none cursor-pointer rounded-full border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 pl-4 pr-9 py-2 text-sm font-medium text-gray-900 dark:text-white outline-none hover:bg-gray-100 dark:hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors"
+                  >
+                    {field.options.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Tentang Anda</h4>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 mb-3">
+          Konteks yang membantu AI memahami situasi Anda, misalnya profesi atau bidang usaha. Disimpan di akun Anda (maks. 500 karakter).
         </p>
-        <textarea 
+        <textarea
           value={val}
           onChange={(e) => setVal(e.target.value)}
-          rows={6}
-          className="w-full px-5 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-2xl outline-none focus:ring-4 focus:ring-black/5 dark:focus:ring-white/5 focus:border-black dark:focus:border-white transition-all font-medium resize-none text-gray-900 dark:text-white"
-          placeholder="Misal: Saya ingin jawaban yang ringkas dan profesional..."
+          rows={4}
+          maxLength={500}
+          className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-sm resize-none text-gray-900 dark:text-white"
+          placeholder="Misal: Saya pemilik UMKM dengan 5 karyawan di Jawa Tengah."
         />
-      </div>
-
-      <button 
-        onClick={() => onSave({ personalContext: val })}
-        disabled={loading || val === data.personalContext}
-        className="px-8 py-4 bg-black dark:bg-white text-white dark:text-slate-900 rounded-2xl font-bold hover:opacity-80 transition-all active:scale-[0.98] shadow-lg shadow-black/5 dark:shadow-white/5 disabled:opacity-30 flex items-center justify-center min-w-[200px]"
-      >
-        {loading ? (
-          <div className="w-5 h-5 border-2 border-white/30 dark:border-slate-900/30 border-t-white dark:border-t-slate-900 rounded-full animate-spin"></div>
-        ) : "Simpan Preferensi AI"}
-      </button>
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-[11px] text-gray-400">{(val || "").length}/500</span>
+          <button
+            onClick={() => onSave({ personalContext: val })}
+            disabled={loading || val === data.personalContext}
+            className="px-5 py-2 bg-gray-900 dark:bg-white text-white dark:text-slate-900 rounded-full text-sm font-semibold hover:opacity-85 transition-opacity disabled:opacity-30 flex items-center justify-center min-w-[96px]"
+          >
+            {loading ? (
+              <div className="w-4 h-4 border-2 border-white/30 dark:border-slate-900/30 border-t-white dark:border-t-slate-900 rounded-full animate-spin"></div>
+            ) : "Simpan"}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -601,108 +659,197 @@ function SectionAppearance() {
   );
 }
 
-function SectionAccount({ user, onDelete }) {
-  const [step, setStep] = useState(0); // 0: section, 1: first confirm, 2: final confirm
-  const [confirmText, setConfirmText] = useState("");
-  const isCorrect = confirmText === "HAPUS";
+// ── Tab Akun: daftar pengaturan sederhana (dokumen legal, hapus riwayat, hapus akun) ──
 
-  const reset = () => {
-    setStep(0);
-    setConfirmText("");
+function SettingsGroup({ title, children }) {
+  return (
+    <section>
+      <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">{title}</h4>
+      <div className="rounded-2xl border border-gray-200 dark:border-slate-700 divide-y divide-gray-200 dark:divide-slate-700">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function SettingsRow({ title, description, children }) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-5 py-4">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-gray-900 dark:text-white">{title}</p>
+        {description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{description}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+const pillButton =
+  "inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40";
+const pillNeutral = `${pillButton} border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700`;
+const pillDanger = `${pillButton} border-red-200 dark:border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10`;
+
+// Dialog konfirmasi 2 langkah: (1) penjelasan → (2) ketik HAPUS
+function ConfirmDeleteDialog({ open, title, description, consequences, confirmLabel, busy, error, onConfirm, onClose }) {
+  const [step, setStep] = useState(1);
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    if (open) { setStep(1); setText(""); }
+  }, [open]);
+
+  if (!open) return null;
+  const close = () => { if (!busy) onClose(); };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="absolute inset-0 bg-black/40" onClick={close} />
+      <div className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-xl p-6">
+        <p className="text-[11px] font-medium text-gray-400 mb-1">Langkah {step} dari 2</p>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+
+        {step === 1 ? (
+          <>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{description}</p>
+            {consequences?.length > 0 && (
+              <ul className="mt-3 space-y-1.5 text-sm text-gray-600 dark:text-gray-300 list-disc pl-5">
+                {consequences.map((c) => <li key={c}>{c}</li>)}
+              </ul>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={close} className={pillNeutral}>Batal</button>
+              <button type="button" onClick={() => setStep(2)} className={`${pillButton} border-red-600 bg-red-600 text-white hover:bg-red-700`}>Lanjutkan</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <label htmlFor="confirm-delete" className="mt-2 block text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+              Tindakan ini permanen. Ketik <span className="font-semibold text-gray-900 dark:text-white">HAPUS</span> untuk mengonfirmasi.
+            </label>
+            <input
+              id="confirm-delete"
+              type="text"
+              autoFocus
+              autoComplete="off"
+              value={text}
+              onChange={(e) => setText(e.target.value.toUpperCase())}
+              placeholder="HAPUS"
+              className="mt-3 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm font-medium tracking-wider text-gray-900 dark:text-white outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+            />
+            {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={close} disabled={busy} className={pillNeutral}>Batal</button>
+              <button
+                type="button"
+                onClick={onConfirm}
+                disabled={text !== "HAPUS" || busy}
+                className={`${pillButton} border-red-600 bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed`}
+              >
+                {busy ? "Menghapus..." : confirmLabel}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+const EXTERNAL_ICON = (
+  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+);
+
+function SectionLegal() {
+  return (
+    <SettingsGroup title="Dokumen legal">
+      <SettingsRow title="Kebijakan Privasi" description="Data yang kami kumpulkan, penggunaannya, dan hak Anda.">
+        <a href={LEGAL_PATHS.privacy} target="_blank" rel="noopener noreferrer" className={pillNeutral} aria-label="Buka Kebijakan Privasi di tab baru">
+          Buka {EXTERNAL_ICON}
+        </a>
+      </SettingsRow>
+      <SettingsRow title="Syarat dan Ketentuan" description="Aturan penggunaan layanan dan batasan informasi hukum AI.">
+        <a href={LEGAL_PATHS.terms} target="_blank" rel="noopener noreferrer" className={pillNeutral} aria-label="Buka Syarat dan Ketentuan di tab baru">
+          Buka {EXTERNAL_ICON}
+        </a>
+      </SettingsRow>
+    </SettingsGroup>
+  );
+}
+
+function SectionDataAndAccount({ onDeleteAccount }) {
+  const [dialog, setDialog] = useState(null); // "history" | "account" | null
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const open = (which) => { setError(""); setDialog(which); };
+
+  const deleteHistory = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await deleteAllChats();
+      setDialog(null);
+      setNotice(`${data.deletedChats ?? 0} percakapan telah dihapus.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await onDeleteAccount();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
   };
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="p-8 border-2 border-red-100 dark:border-red-900/20 bg-red-50/30 dark:bg-red-900/5 rounded-[2rem] transition-all">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center text-red-600 shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-            </div>
-            <div>
-              <h4 className="text-lg font-black text-gray-900 dark:text-white mb-1">Zona Berbahaya</h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed mb-6">
-                Menghapus akun Anda adalah tindakan permanen. Seluruh data obrolan, riwayat transaksi, dan profil akan dihapus selamanya dari sistem kami.
-              </p>
-              <button
-                onClick={() => setStep(1)}
-                className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-200 dark:shadow-red-900/20 transition-all active:scale-95"
-              >
-                Hapus Akun Saya
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SettingsGroup title="Data dan akun">
+        <SettingsRow
+          title="Hapus semua riwayat chat"
+          description={notice || "Menghapus seluruh percakapan secara permanen. Akun dan langganan tetap aman."}
+        >
+          <button type="button" onClick={() => open("history")} className={pillDanger}>Hapus riwayat</button>
+        </SettingsRow>
+        <SettingsRow title="Hapus akun" description="Menghapus akun beserta profil, percakapan, dan riwayat transaksi secara permanen.">
+          <button type="button" onClick={() => open("account")} className={pillDanger}>Hapus akun</button>
+        </SettingsRow>
+      </SettingsGroup>
 
-      {/* STEP 1: INITIAL WARNING */}
-      {step === 1 && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={reset} />
-          <div className="relative bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-slate-800">
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center text-red-600 mb-6">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-            </div>
-            <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-4">Apakah Anda yakin?</h3>
-            <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-8">
-              Anda akan kehilangan akses ke seluruh layanan <span className="font-bold text-gray-900 dark:text-white">TanyaHukum</span>. Tindakan ini tidak dapat dibatalkan atau dikembalikan.
-            </p>
-            <div className="flex flex-col gap-3">
-              <button 
-                onClick={() => setStep(2)}
-                className="w-full px-6 py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-red-200 dark:shadow-red-900/20 active:scale-95"
-              >
-                Saya Mengerti, Lanjutkan
-              </button>
-              <button 
-                onClick={reset}
-                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-gray-400 rounded-2xl font-bold hover:bg-gray-100 dark:hover:bg-slate-700 transition-all"
-              >
-                Batalkan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 2: FINAL INTENTIONAL CONFIRMATION */}
-      {step === 2 && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={reset} />
-          <div className="relative bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300 border border-red-200 dark:border-red-900/30">
-            <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-2">Konfirmasi Terakhir</h3>
-            <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-8">
-              Ketik kata <span className="font-black text-red-500 underline uppercase tracking-widest">HAPUS</span> di bawah ini untuk mengonfirmasi penghapusan akun secara permanen.
-            </p>
-            
-            <div className="space-y-6">
-              <input 
-                type="text"
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
-                placeholder="Ketik HAPUS"
-                className="w-full px-6 py-4 bg-red-50/50 dark:bg-red-900/10 border-2 border-red-100 dark:border-red-900/20 rounded-2xl outline-none focus:border-red-500 text-center font-black tracking-widest text-red-600 placeholder:text-red-200 dark:placeholder:text-red-900/40 transition-all"
-              />
-
-              <div className="flex gap-3">
-                <button 
-                  onClick={reset}
-                  className="flex-1 px-4 py-4 bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-gray-400 rounded-2xl font-bold hover:bg-gray-100 dark:hover:bg-slate-700 transition-all"
-                >
-                  Batal
-                </button>
-                <button 
-                  disabled={!isCorrect}
-                  onClick={onDelete}
-                  className="flex-[2] px-4 py-4 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200 dark:shadow-red-900/20 active:scale-95 disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
-                >
-                  Hapus Permanen
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDeleteDialog
+        open={dialog === "history"}
+        title="Hapus semua riwayat chat?"
+        description="Semua percakapan di sidebar akan dihapus dan tidak dapat dikembalikan."
+        consequences={["Akun, profil, dan paket langganan tetap aman", "Kuota pertanyaan hari ini tidak bertambah"]}
+        confirmLabel="Hapus semua riwayat"
+        busy={busy}
+        error={error}
+        onConfirm={deleteHistory}
+        onClose={() => setDialog(null)}
+      />
+      <ConfirmDeleteDialog
+        open={dialog === "account"}
+        title="Hapus akun Anda?"
+        description="Anda akan keluar dan kehilangan akses ke TanyaHukum. Data berikut dihapus permanen:"
+        consequences={["Profil dan konteks personal", "Seluruh riwayat percakapan", "Paket Pro dan riwayat transaksi"]}
+        confirmLabel="Hapus akun permanen"
+        busy={busy}
+        error={error}
+        onConfirm={deleteAccount}
+        onClose={() => setDialog(null)}
+      />
     </>
   );
 }

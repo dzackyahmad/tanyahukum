@@ -359,13 +359,14 @@ describe('POST /api/chat — mode streaming', () => {
   const parseEvents = async (res) =>
     (await res.text()).split('\n').filter(Boolean).map((l) => JSON.parse(l));
 
-  function mockStreamingServices({ chunks, streamError } = {}) {
+  function mockStreamingServices({ chunks, streamError, failModels = [], matches } = {}) {
+    global.__llmCalls = [];
     jest.doMock('@pinecone-database/pinecone', () => ({
       Pinecone: class {
         Index() {
           return {
             query: jest.fn().mockResolvedValue({
-              matches: [
+              matches: matches || [
                 { metadata: { title: 'Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023', page: '1-25', text: 'Pasal 19 ...' } },
                 { metadata: { title: 'Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023', page: '26-50', text: 'Pasal 20 ...' } },
                 { metadata: { title: 'Regulasi Ketenagakerjaan - 2023pd3332009', page: '26-50', text: 'Pasal 39 ...' } },
@@ -380,9 +381,10 @@ describe('POST /api/chat — mode streaming', () => {
     }));
     jest.doMock('@langchain/google-genai', () => ({
       ChatGoogleGenerativeAI: class {
-        constructor(opts) { this.opts = opts; }
+        constructor(opts) { this.opts = opts; global.__llmCalls.push(opts); }
         async stream() {
           if (streamError) throw streamError;
+          if (failModels.includes(this.opts.model)) throw Object.assign(new Error('quota exceeded'), { status: 429 });
           return (async function* () { for (const c of chunks) yield { content: c }; })();
         }
       },
@@ -418,7 +420,7 @@ describe('POST /api/chat — mode streaming', () => {
     const types = events.map((e) => (e.type === 'step' ? `${e.step}:${e.state}` : e.type));
     expect(types).toEqual([
       'search:active', 'sources', 'search:done',
-      'think:active', 'thinking', 'think:done', 'write:active',
+      'think:active', 'model', 'thinking', 'think:done', 'write:active',
       'text', 'text', 'write:done', 'done',
     ]);
 
@@ -434,6 +436,78 @@ describe('POST /api/chat — mode streaming', () => {
     // Riwayat tersimpan sama seperti mode JSON (thinking TIDAK ikut disimpan)
     const aiSave = prismaMock.chatHistory.create.mock.calls.find(([a]) => a.data.role === 'AI')[0];
     expect(aiSave.data.content).toBe('PKWT paling lama 5 tahun.');
+  });
+
+  test('TC-CHAT-28: Gemini 3.6 Flash · Kilat → thinking level rendah, tidak ada event thinking', async () => {
+    mockStreamingServices({ chunks: ['Jawaban cepat.'] });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock: prismaFor(), authSession: SESSION_U1 });
+    const events = await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true, mode: 'fast' } })));
+
+    expect(global.__llmCalls[0]).toMatchObject({ model: 'gemini-3.6-flash', thinkingConfig: { thinkingLevel: 'low' } });
+    expect(events.some((e) => e.type === 'thinking')).toBe(false);
+    expect(events.find((e) => e.type === 'model')).toMatchObject({ model: 'gemini-3.6-flash', mode: 'fast', fallback: false });
+    expect(events.at(-1)).toMatchObject({ type: 'done', mode: 'fast', model: 'gemini-3.6-flash' });
+  });
+
+  test('TC-CHAT-29: mode tidak dikenal → default mendalam (thinking aktif)', async () => {
+    mockStreamingServices({ chunks: ['x'] });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock: prismaFor(), authSession: SESSION_U1 });
+    await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true, mode: 'turbo<script>' } })));
+    expect(global.__llmCalls[0].thinkingConfig).toEqual({ includeThoughts: true });
+  });
+
+  test('TC-CHAT-30: kuota model utama habis → otomatis pakai model cadangan, jawaban tetap tersimpan', async () => {
+    mockStreamingServices({ chunks: ['Jawaban dari cadangan.'], failModels: ['gemini-3.6-flash'] });
+    const prismaMock = prismaFor();
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+    const events = await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true } })));
+
+    const models = events.filter((e) => e.type === 'model');
+    expect(models.map((m) => [m.model, m.fallback])).toEqual([['gemini-3.6-flash', false], ['gemini-3.5-flash-lite', true]]);
+    // Gemini 3.x mode mendalam: budget eksplisit (budget 0 ditolak API untuk 3.x)
+    expect(global.__llmCalls[1].thinkingConfig).toEqual({ includeThoughts: true, thinkingBudget: 1024 });
+    expect(events.at(-1)).toMatchObject({ type: 'done', model: 'gemini-3.5-flash-lite', answer: 'Jawaban dari cadangan.' });
+    expect(prismaMock.chatHistory.create).toHaveBeenCalledTimes(2);
+  });
+
+  test('TC-CHAT-31: chunk sampah (duplikat & tabel kosong) disaring, 5 teratas tidak pernah dibuang', async () => {
+    const legal = (n) => ({ metadata: { title: `Regulasi Perdata - PP ${n}`, page: '1-25', text: `Pasal ${n} ayat (1) Setiap pengusaha wajib memberikan hak pekerja sesuai ketentuan peraturan perundang-undangan yang berlaku.` } });
+    const junkTable = { metadata: { title: 'Regulasi Perdata - Lampiran', page: '1-25', text: '| | | | | | | 4. Melampirkan | | | | | | | | | | | | | | |' } };
+    mockStreamingServices({
+      chunks: ['ok'],
+      matches: [legal(1), junkTable, legal(2), legal(3), legal(4), legal(5), junkTable, legal(1), legal(6)],
+    });
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock: prismaFor(), authSession: SESSION_U1 });
+    const events = await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true } })));
+
+    const sources = events.find((e) => e.type === 'sources');
+    expect(sources.count).toBe(9);     // diambil dari Pinecone
+    expect(sources.filtered).toBe(2);  // tabel kosong di posisi ke-7 + duplikat PP 1 (tabel di posisi ke-2 tetap, karena 5 teratas)
+    expect(sources.used).toBe(7);
+  });
+
+  test('TC-CHAT-32: embedding pertanyaan yang sama di-cache (Voyage hanya dipanggil sekali)', async () => {
+    mockStreamingServices({ chunks: ['ok'] });
+    const embedSpy = jest.fn().mockResolvedValue([0.1]);
+    jest.doMock('@langchain/community/embeddings/voyage', () => ({ VoyageEmbeddings: class { embedQuery(...a) { return embedSpy(...a); } } }));
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock: prismaFor(), authSession: SESSION_U1 });
+
+    await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Apa itu PKWT?', stream: true } })));
+    await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: '  apa itu   PKWT? ', stream: true } })));
+    expect(embedSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('TC-CHAT-33: prompt berisi aturan ringkas & aturan kutipan tetap ada', async () => {
+    mockStreamingServices({ chunks: ['ok'] });
+    let systemPrompt = '';
+    jest.doMock('@langchain/core/messages', () => ({
+      HumanMessage: class { constructor(c) { this.content = c; } },
+      SystemMessage: class { constructor(c) { this.content = c; systemPrompt = c; } },
+    }));
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock: prismaFor(), authSession: SESSION_U1 });
+    await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true } })));
+    expect(systemPrompt).toContain('RINGKAS & LANGSUNG');
+    expect(systemPrompt).toContain('KUTIPAN SUMBER YANG JELAS');
   });
 
   test('TC-CHAT-26: kuota Gemini habis saat streaming → event error, riwayat tidak disimpan', async () => {

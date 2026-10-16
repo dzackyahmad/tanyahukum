@@ -1,0 +1,198 @@
+'==============================================================
+' DEPLOYMENT DIAGRAM — SISTEM TANYAHUKUM
+' Menggambarkan infrastruktur dan deployment environment
+'==============================================================
+
+@startuml DEPLOYMENT
+title Deployment Diagram — Sistem TanyaHukum
+
+skinparam node {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  FontStyle bold
+  FontSize 12
+}
+skinparam component {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontSize 11
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+  FontSize 11
+}
+skinparam rectangle {
+  BackgroundColor #F5EEF8
+  BorderColor #8e44ad
+  FontSize 11
+}
+skinparam artifact {
+  BackgroundColor #FDEDEC
+  BorderColor #e74c3c
+  FontSize 10
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+skinparam cloud {
+  BackgroundColor #EBF5FB
+  BorderColor #2980b9
+}
+
+' ══════════════════════════════════════════════════════════
+' CLIENT SIDE
+' ══════════════════════════════════════════════════════════
+node "Client\n(Browser)" as CLIENT {
+  component "Next.js App\n(React 19 + Tailwind CSS)" as NEXTAPP
+  component "Google Sign-In\nSDK (GSI)" as GSI
+  artifact "JWT Cookie\n(HttpOnly, 7 hari)" as COOKIE
+  artifact "localStorage\n(user, conversations)" as LS
+}
+
+' ══════════════════════════════════════════════════════════
+' HOSTING — VERCEL
+' ══════════════════════════════════════════════════════════
+node "Vercel\n(Next.js Hosting)" as VERCEL {
+
+  component "Next.js 16\nApp Router\n(SSR + API Routes)" as NEXTJS
+
+  component "middleware.js\n(JWT Auth Guard\nAdmin Protection)" as MW
+
+  package "API Route Handlers" as ROUTES {
+    component "/api/auth/*\n(register, login, google\nforgot, reset, logout)" as AUTH
+    component "/api/chat\n(RAG Pipeline)" as CHAT
+    component "/api/profile/*\n(GET, PATCH, DELETE\nupload avatar)" as PROFILE
+    component "/api/regulations/*\n(list, detail, download)" as REGS
+    component "/api/dashboard\n(+ 30s in-memory cache)" as DASH
+    component "/api/payment/*\n(checkout, webhook)" as PAY
+    component "/api/admin/*\n(users, regulations\ntrending, stats, logs)" as ADMIN
+  }
+
+  component "In-Memory Cache\n(Dashboard 30s TTL\nRate Limiter LRU)" as CACHE
+}
+
+' ══════════════════════════════════════════════════════════
+' SUPABASE — DATABASE + STORAGE
+' ══════════════════════════════════════════════════════════
+node "Supabase\n(Backend as a Service)" as SUPABASE_NODE {
+
+  database "PostgreSQL\n(Primary Database)" as PGDB {
+    artifact "User" as T1
+    artifact "Chat + ChatHistory" as T2
+    artifact "Regulation" as T3
+    artifact "Transaction" as T4
+    artifact "SearchLog" as T5
+    artifact "TrendingIssue" as T6
+    artifact "PromptUsage (baru)" as T7
+  }
+
+  component "Prisma ORM\n(Query Builder\n+ Migration)" as PRISMA
+
+  database "Supabase Storage" as STORAGE {
+    artifact "avatars/\n(foto profil user)" as B1
+    artifact "legal-documents/\n(file PDF regulasi)" as B2
+  }
+
+  component "Row Level Security\n(RLS)" as RLS
+}
+
+' ══════════════════════════════════════════════════════════
+' AI SERVICES
+' ══════════════════════════════════════════════════════════
+cloud "AI Services" as AICLOUD {
+
+  node "VoyageAI API\n(voyage-law-2)" as VOYAGE {
+    component "Text Embedding\nfloat[1024]" as EMB
+  }
+
+  node "Pinecone\n(Vector Database)" as PINECONE {
+    database "Vector Index\n(dokumen hukum Indonesia\n+ metadata)" as VIDX
+  }
+
+  node "Google AI Studio\n(Gemini API)" as GEMINI_NODE {
+    component "LLM Inference (stream)\n3.5 Flash-Lite (default), 3.6 Flash\n3.5 Flash | LangChain SDK" as LLM
+  }
+
+  node "Groq Cloud\n(OpenAI-compatible API)" as GROQ_NODE {
+    component "LLM Inference (stream)\nGPT-OSS 120B, Qwen 3.8\nkonteks 20 potongan teratas" as GROQLLM
+  }
+}
+
+' ══════════════════════════════════════════════════════════
+' THIRD PARTY SERVICES
+' ══════════════════════════════════════════════════════════
+cloud "Third-Party Services" as TPCLOUD {
+
+  node "Google OAuth 2.0\nServer" as GOOGLE_NODE {
+    component "verifyIdToken\n(OAuth2Client)" as GAUTH
+  }
+
+  node "Midtrans\n(Payment Gateway)" as MIDTRANS_NODE {
+    component "Snap API\n(popup checkout)" as SNAP
+    component "CoreAPI\n(status check\nwebhook)" as CORE
+  }
+
+  node "Gmail SMTP\n(Nodemailer)" as SMTP_NODE {
+    component "Reset Password\nEmail Service" as MAIL
+  }
+}
+
+' ══════════════════════════════════════════════════════════
+' KONEKSI — CLIENT ↔ VERCEL
+' ══════════════════════════════════════════════════════════
+CLIENT --> VERCEL : HTTPS Request\n(JWT Cookie)
+VERCEL --> CLIENT : HTML/JSON Response\nSet-Cookie: token
+
+' ══════════════════════════════════════════════════════════
+' KONEKSI — VERCEL ↔ SUPABASE
+' ══════════════════════════════════════════════════════════
+ROUTES --> PRISMA : Prisma Client\n(query SQL)
+PRISMA --> PGDB : PostgreSQL\nConnection Pool\n(via DATABASE_URL)
+PROFILE --> STORAGE : upload avatar\n(Supabase Admin SDK)
+ADMIN --> STORAGE : upload PDF regulasi\n(Supabase Admin SDK)
+REGS --> STORAGE : fetch PDF\n(server-side proxy)
+
+' ══════════════════════════════════════════════════════════
+' KONEKSI — VERCEL ↔ AI SERVICES
+' ══════════════════════════════════════════════════════════
+CHAT --> VOYAGE : embedQuery(text)\nAPI Key: VOYAGEAI_API_KEY
+VOYAGE --> CHAT : vector float[1024]
+
+CHAT --> PINECONE : index.query(vector, topK:50)\nAPI Key: PINECONE_API_KEY
+PINECONE --> CHAT : top-50 matches\n+ metadata
+
+CHAT --> GEMINI_NODE : llm.stream(messages)\nAPI Key: GOOGLE_API_KEY\n(model sesuai mode dipilih)
+GEMINI_NODE --> CHAT : stream jawaban Markdown\n(NDJSON ke browser)
+GEMINI_NODE --> GEMINI_NODE : fallback otomatis ke model\nGemini cadangan (kuota habis\n/ server sibuk, sebelum menulis)
+
+CHAT --> GROQ_NODE : POST (OpenAI-compatible)\nAPI Key: GROQ_API_KEY\n(bila mode = GPT-OSS/Qwen)
+GROQ_NODE --> CHAT : stream jawaban Markdown\n(fallback ke GEMINI_NODE bila gagal)
+note on link
+  Tanpa GROQ_API_KEY,
+  mode Groq otomatis
+  memakai Gemini.
+end note
+
+' ══════════════════════════════════════════════════════════
+' KONEKSI — VERCEL ↔ THIRD-PARTY
+' ══════════════════════════════════════════════════════════
+AUTH --> GOOGLE_NODE : verifyIdToken(credentialToken)\nClient ID: GOOGLE_CLIENT_ID
+GOOGLE_NODE --> AUTH : payload (email, name, picture)
+
+PAY --> MIDTRANS_NODE : Snap.createTransaction\nAPI Key: MIDTRANS_SERVER_KEY
+MIDTRANS_NODE --> PAY : Snap token + redirect_url
+MIDTRANS_NODE --> PAY : POST webhook\n(payment notification)
+
+PROFILE --> MIDTRANS_NODE : CoreAPI.status(orderId)\n[self-healing]
+
+AUTH --> SMTP_NODE : sendResetPasswordEmail\nSMTP: smtp.gmail.com:587
+SMTP_NODE --> CLIENT : email reset password
+
+' ══════════════════════════════════════════════════════════
+' INTERNAL VERCEL
+' ══════════════════════════════════════════════════════════
+NEXTJS --> MW : setiap request
+MW --> ROUTES : teruskan jika authorized
+ROUTES --> CACHE : baca/tulis cache\n(dashboard + rate limiter)
+
+@enduml

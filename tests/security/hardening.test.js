@@ -240,6 +240,31 @@ describe('SECURITY: Middleware CSRF & halaman admin', () => {
     const admin = await middleware(makeReq({ pathname: '/admin', token: adminToken }));
     expect(admin.status).toBe(200);
   });
+
+  test('S-PAGE-01: /dashboard dan /pusat-data tanpa login di-redirect ke /chatbot, /chatbot tetap terbuka', async () => {
+    process.env.JWT_SECRET = 'page-guard-secret';
+    const { SignJWT } = await import('jose');
+    const key = new TextEncoder().encode(process.env.JWT_SECRET);
+    const userToken = await new SignJWT({ role: 'USER' }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h').sign(key);
+    const forged = await new SignJWT({ role: 'USER' }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h')
+      .sign(new TextEncoder().encode('wrong-secret'));
+    const { middleware } = await import('@/middleware');
+
+    for (const pathname of ['/dashboard', '/pusat-data']) {
+      const anon = await middleware(makeReq({ pathname }));
+      expect(anon.status).toBe(307);
+      expect(anon.headers.get('location')).toContain('/chatbot');
+
+      const bad = await middleware(makeReq({ pathname, token: forged }));
+      expect(bad.status).toBe(307);
+
+      const user = await middleware(makeReq({ pathname, token: userToken }));
+      expect(user.status).toBe(200);
+    }
+
+    const guestChat = await middleware(makeReq({ pathname: '/chatbot' }));
+    expect(guestChat.status).toBe(200);
+  });
 });
 
 describe('SECURITY: Validasi admin users', () => {

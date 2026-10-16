@@ -5,6 +5,7 @@ import Header from "@/components/layout/Header";
 import LegalResponse from "./LegalResponse";
 import AIDisclaimer from "./AIDisclaimer";
 import ProcessPanel from "./ProcessPanel";
+import ModeToggle, { DEFAULT_MODE, MODE_IDS } from "./ModeToggle";
 
 import {
   sendMessageStream,
@@ -84,6 +85,19 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
   const [loading, setLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState(null);
 
+  // Model & mode jawaban (default: Gemini 3.5 Flash-Lite · Kilat). Pilihan disimpan di browser.
+  const [chatMode, setChatMode] = useState(DEFAULT_MODE);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("tanyahukum_chat_mode");
+      if (MODE_IDS.includes(saved)) setChatMode(saved);
+    } catch {}
+  }, []);
+  const changeChatMode = (mode) => {
+    setChatMode(mode);
+    try { localStorage.setItem("tanyahukum_chat_mode", mode); } catch {}
+  };
+
   const [emptyTitle, setEmptyTitle] = useState("");
   const [emptyText, setEmptyText] = useState("");
   const [suggestions, setSuggestions] = useState([]); // diacak tiap obrolan baru
@@ -133,6 +147,21 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
   // SEND MESSAGE
   // ==============================
   // overrideText: dipakai tombol rekomendasi pertanyaan (kirim langsung tanpa mengetik)
+  // Tombol Stop: membatalkan request yang sedang berjalan
+  const abortRef = useRef(null);
+  const stopGeneration = () => abortRef.current?.abort();
+
+  // Edit pertanyaan yang dihentikan: { key, text }
+  const [editing, setEditing] = useState(null);
+  const submitEdit = (userKey, newText) => {
+    if (!newText.trim()) return;
+    const aiKey = userKey.replace(/-user$/, "");
+    // Pertanyaan yang dihentikan tidak tersimpan di riwayat → ganti dengan versi baru
+    setMessages((prev) => prev.filter((m) => m.key !== userKey && m.key !== aiKey));
+    setEditing(null);
+    handleSend(newText);
+  };
+
   const handleSend = async (overrideText) => {
     const text = typeof overrideText === "string" ? overrideText : message;
     if (!text.trim()) return;
@@ -153,19 +182,23 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
 
     const currentChatId = getCurrentConversationId();
 
+    // Placeholder jawaban AI yang diisi bertahap oleh event streaming (transparansi proses)
+    const streamKey = `stream-${Date.now()}`;
+    const userKey = `${streamKey}-user`;
     const userMessage = {
       role: "user",
       content: text,
+      key: userKey,
     };
-
-    // Placeholder jawaban AI yang diisi bertahap oleh event streaming (transparansi proses)
-    const streamKey = `stream-${Date.now()}`;
     const placeholder = {
       role: "assistant",
       content: "",
       streaming: true,
       key: streamKey,
       process: {
+        mode: chatMode,
+        model: null,
+        fallback: false,
         steps: { search: "pending", think: "pending", write: "pending" },
         sources: null,
         thinking: "",
@@ -183,11 +216,15 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
     setMessages((prev) => [...prev, userMessage, placeholder]);
     setMessage("");
     setLoading(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const data = await sendMessageStream({
+        signal: controller.signal,
         message: text,
         chatId: currentChatId,
+        mode: chatMode,
         onEvent: (event) => {
           if (event.type === "step") {
             const now = Date.now();
@@ -202,7 +239,9 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
               },
             }));
           } else if (event.type === "sources") {
-            updateStreamMsg((m) => ({ ...m, process: { ...m.process, sources: { count: event.count, uniqueCount: event.uniqueCount, docs: event.docs || [] } } }));
+            updateStreamMsg((m) => ({ ...m, process: { ...m.process, sources: { count: event.count, used: event.used, filtered: event.filtered, uniqueCount: event.uniqueCount, docs: event.docs || [] } } }));
+          } else if (event.type === "model") {
+            updateStreamMsg((m) => ({ ...m, process: { ...m.process, model: event.model, provider: event.provider, contextChunks: event.contextChunks, mode: event.mode || m.process.mode, fallback: !!event.fallback } }));
           } else if (event.type === "thinking") {
             updateStreamMsg((m) => ({ ...m, process: { ...m.process, thinking: m.process.thinking + event.text } }));
           } else if (event.type === "text") {
@@ -246,12 +285,28 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
       window.dispatchEvent(new Event("auth-change"));
 
     } catch (err) {
+      if (err?.aborted) {
+        // Dihentikan pengguna: jawaban sebagian tetap tampil (tidak disimpan), pertanyaan bisa diedit
+        setMessages((prev) =>
+          prev
+            .filter((m) => m.key !== streamKey || m.content)
+            .map((m) => {
+              if (m.key === userKey) return { ...m, stopped: true };
+              if (m.key === streamKey) {
+                return { ...m, streaming: false, stopped: true, process: m.process ? { ...m.process, done: true, durationMs: Date.now() - m.process.startedAt } : m.process };
+              }
+              return m;
+            })
+        );
+        return;
+      }
       // Ganti placeholder dengan pesan error (tanpa panel proses)
       updateStreamMsg(() => ({
         role: "assistant",
         content: err.error || "Terjadi kesalahan.",
       }));
     } finally {
+      abortRef.current = null;
       setLoading(false);
       sendingRef.current = false;
     }
@@ -310,19 +365,21 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
                 }}
               />
 
+              <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} />
+
               <button
                 id="send-btn-center"
-                onClick={handleSend}
-                disabled={loading}
+                onClick={loading ? stopGeneration : handleSend}
+                title={loading ? "Hentikan jawaban" : "Kirim"}
                 className="px-6 flex items-center justify-center hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all active:scale-95 group/send"
               >
-                <img 
+                {loading ? <StopIcon /> : <img 
                   src="/icons/sendChat.svg" 
                   className="w-6 h-6 transition-all group-hover/send:scale-110" 
                   style={{ 
                     filter: "invert(37%) sepia(93%) saturate(1352%) hue-rotate(200deg) brightness(88%) contrast(101%)" 
                   }}
-                />
+                />}
               </button>
 
             </div>
@@ -356,10 +413,43 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
 
                 {messages.map((msg, i) =>
                   msg.role === "user" ? (
-                    <div key={i} className="flex justify-end">
-                      <div className="max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl rounded-br-md bg-blue-600 text-white text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                        {msg.content}
-                      </div>
+                    <div key={i} className="flex flex-col items-end group/user">
+                      {editing && msg.key && editing.key === msg.key ? (
+                        <div className="w-full sm:max-w-[70%] rounded-2xl border border-blue-300 dark:border-blue-500/50 bg-white dark:bg-slate-800 p-3">
+                          <textarea
+                            autoFocus
+                            value={editing.text}
+                            onChange={(e) => setEditing({ ...editing, text: e.target.value })}
+                            rows={3}
+                            className="w-full resize-none bg-transparent outline-none text-[15px] text-gray-800 dark:text-slate-100"
+                          />
+                          <div className="mt-2 flex justify-end gap-2">
+                            <button type="button" onClick={() => setEditing(null)} className="px-3 py-1.5 text-xs font-semibold rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700">Batal</button>
+                            <button type="button" disabled={loading || !editing.text.trim()} onClick={() => submitEdit(msg.key, editing.text)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Kirim ulang</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl rounded-br-md bg-blue-600 text-white text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                          {msg.content}
+                        </div>
+                      )}
+                      {!(editing && msg.key && editing.key === msg.key) && (
+                        <div className="mt-1 flex items-center gap-1 opacity-70 group-hover/user:opacity-100 transition-opacity">
+                          {msg.stopped && <span className="text-[11px] text-amber-600 dark:text-amber-400 mr-1">Dihentikan · tidak disimpan</span>}
+                          <ActionButton
+                            icon="/icons/copy.svg"
+                            label={copiedIndex === `u-${i}` ? "Tersalin" : "Salin"}
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.content);
+                              setCopiedIndex(`u-${i}`);
+                              setTimeout(() => setCopiedIndex((cur) => (cur === `u-${i}` ? null : cur)), 2000);
+                            }}
+                          />
+                          {msg.stopped && msg.key && (
+                            <ActionButton icon="/icons/pen.svg" label="Edit" onClick={() => setEditing({ key: msg.key, text: msg.content })} />
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div key={i} className="flex items-start gap-3 group">
@@ -435,19 +525,21 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
                   }}
                 />
 
+                <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} openUpward />
+
                 <button
                   id="send-btn"
-                  onClick={handleSend}
-                  disabled={loading}
+                  onClick={loading ? stopGeneration : handleSend}
+                  title={loading ? "Hentikan jawaban" : "Kirim"}
                   className="mr-2 my-2 w-10 h-10 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl transition-all active:scale-95 flex items-center justify-center shrink-0 group/send"
                 >
-                  <img 
+                  {loading ? <StopIcon /> : <img 
                     src="/icons/sendChat.svg" 
                     className="w-5 h-5 transition-all group-hover/send:translate-x-0.5 group-hover/send:-translate-y-0.5" 
                     style={{ 
                       filter: "invert(37%) sepia(93%) saturate(1352%) hue-rotate(200deg) brightness(88%) contrast(101%)" 
                     }}
-                  />
+                  />}
                 </button>
 
               </div>
@@ -459,6 +551,14 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
 
       </div>
     </div>
+  );
+}
+
+function StopIcon() {
+  return (
+    <span className="w-5 h-5 flex items-center justify-center" aria-label="Hentikan">
+      <span className="w-3 h-3 rounded-[3px] bg-blue-600 dark:bg-blue-400" />
+    </span>
   );
 }
 

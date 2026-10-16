@@ -24,13 +24,12 @@ export async function GET() {
         tier: true,
         promptLimit: true,
         createdAt: true,
+        // Pemakaian kuota hari ini dihitung dari PromptUsage (sama dengan /api/chat),
+        // bukan dari riwayat chat yang bisa dihapus pengguna.
         _count: {
           select: {
-            messages: {
-              where: {
-                role: 'USER',
-                createdAt: { gte: today }
-              }
+            promptUsages: {
+              where: { createdAt: { gte: today } }
             }
           }
         },
@@ -47,7 +46,7 @@ export async function GET() {
 
     const formattedUsers = users.map(user => ({
       ...user,
-      remainingQuota: Math.max(0, user.promptLimit - (user._count?.messages || 0)),
+      remainingQuota: Math.max(0, user.promptLimit - (user._count?.promptUsages || 0)),
       lastActive: user.messages?.[0]?.createdAt || null,
       _count: undefined,
       messages: undefined

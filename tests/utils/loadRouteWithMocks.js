@@ -14,6 +14,14 @@ export async function loadRouteWithMocks(routePath, { prismaMock, authSession } 
   jest.resetModules();
 
   if (prismaMock) {
+    // Kuota harian kini dihitung dari tabel PromptUsage. Test lama mengatur jumlah pemakaian
+    // lewat chatHistory.count, jadi jika promptUsage tidak di-mock, nilai itu dipakai ulang.
+    if (prismaMock.chatHistory && !prismaMock.promptUsage) {
+      prismaMock.promptUsage = {
+        count: prismaMock.chatHistory.count || jest.fn().mockResolvedValue(0),
+        create: jest.fn().mockResolvedValue({}),
+      };
+    }
     jest.doMock('@/lib/prisma', () => ({
       __esModule: true,
       default: prismaMock,

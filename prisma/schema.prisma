@@ -26,6 +26,7 @@ model User {
   updatedAt        DateTime        @updatedAt
   chats            Chat[]
   messages         ChatHistory[]
+  promptUsages     PromptUsage[]
   searchLogs       SearchLog[]
   transactions     Transaction[]
   trendingIssues   TrendingIssue[]
@@ -50,6 +51,17 @@ model ChatHistory {
   createdAt DateTime @default(now())
   chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Catatan pemakaian kuota pertanyaan. Sengaja TIDAK terhubung ke Chat, sehingga menghapus
+// riwayat chat tidak mengembalikan kuota harian (sebelumnya kuota dihitung dari ChatHistory).
+model PromptUsage {
+  id        String   @id @default(uuid())
+  userId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model Transaction {

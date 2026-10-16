@@ -89,7 +89,12 @@ export async function POST(request) {
     const dummyHash = '$2a$12$dummyhashforpreventingtimingattacks.placeholder00';
     const hashToCompare = user?.passwordHash ?? dummyHash;
 
-    const isPasswordValid = await bcrypt.compare(password, hashToCompare);
+    // Registrasi menyimpan password yang sudah di-trim → jika gagal dan password diawali/diakhiri
+    // spasi, coba versi ter-trim agar akun tersebut tetap bisa login.
+    let isPasswordValid = await bcrypt.compare(password, hashToCompare);
+    if (!isPasswordValid && user && password !== password.trim()) {
+      isPasswordValid = await bcrypt.compare(password.trim(), hashToCompare);
+    }
 
     if (!user || !isPasswordValid) {
       return NextResponse.json(

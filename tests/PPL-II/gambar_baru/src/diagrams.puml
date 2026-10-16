@@ -1,0 +1,1189 @@
+'==============================================================
+' KUMPULAN DIAGRAM UML — SISTEM TANYAHUKUM
+' ERD · Arsitektur · Sequence · Use Case · Context Diagram
+'==============================================================
+
+' ============================================================
+' 1. ERD — ENTITY RELATIONSHIP DIAGRAM
+' Berdasarkan Prisma Schema
+' ============================================================
+@startuml ERD
+title ERD — Skema Database TanyaHukum
+
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  ArrowColor #2c3e50
+  FontSize 11
+}
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #f39c12
+}
+
+entity "User" as USER {
+  * id : String (UUID) <<PK>>
+  --
+  supabaseId : String? <<UQ>>
+  name : String?
+  avatarUrl : String?
+  * email : String <<UQ>>
+  passwordHash : String?
+  * authProvider : String = "CREDENTIALS"
+  resetToken : String? <<UQ>>
+  resetTokenExpiry : DateTime?
+  * role : Role = USER
+  personalContext : String?
+  * tier : Tier = FREE
+  * promptLimit : Int = 50
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "Chat" as CHAT {
+  * id : String (UUID) <<PK>>
+  --
+  * userId : String <<FK>>
+  title : String?
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "ChatHistory" as CHATHISTORY {
+  * id : String (UUID) <<PK>>
+  --
+  * userId : String <<FK>>
+  * chatId : String <<FK>>
+  * role : Role
+  * content : String
+  * createdAt : DateTime
+}
+
+entity "Transaction" as TRANSACTION {
+  * id : String (UUID) <<PK>>
+  --
+  * orderId : String <<UQ>>
+  * userId : String <<FK>>
+  * amount : Int
+  * status : TransactionStatus = PENDING
+  paymentUrl : String?
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "Regulation" as REGULATION {
+  * id : String (UUID) <<PK>>
+  --
+  * title : String
+  description : String?
+  * fileUrl : String
+  filePath : String?
+  fileName : String?
+  fileSize : Int?
+  * isProcessed : Boolean = false
+  category : String?
+  content : String?
+  * viewCount : Int = 0
+  * isActive : Boolean = true
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "TrendingIssue" as TRENDING {
+  * id : String (UUID) <<PK>>
+  --
+  * title : String
+  * description : String
+  * publishDate : DateTime
+  newsLink : String?
+  location : String?
+  * isActive : Boolean = true
+  * createdAt : DateTime
+  * updatedAt : DateTime
+  createdBy : String? <<FK>>
+}
+
+entity "SearchLog" as SEARCHLOG {
+  * id : String (UUID) <<PK>>
+  --
+  * query : String
+  userId : String? <<FK>>
+  * createdAt : DateTime
+}
+
+entity "PromptUsage" as PROMPTUSAGE {
+  * id : String (UUID) <<PK>>
+  --
+  * userId : String <<FK>>
+  * createdAt : DateTime
+}
+
+note bottom of PROMPTUSAGE
+  Baru (16 Okt 2026): kuota harian AI
+  dihitung dari sini, BUKAN dari
+  ChatHistory -> hapus riwayat chat
+  TIDAK mengembalikan kuota.
+  Index: userId + createdAt
+end note
+
+note bottom of USER
+  Enum Tier: FREE | PRO
+  Enum Role: USER | ADMIN | AI
+end note
+
+note bottom of TRANSACTION
+  Enum TransactionStatus:
+  PENDING | SUCCESS | FAILED
+end note
+
+note bottom of REGULATION
+  Index: viewCount DESC
+end note
+
+note bottom of SEARCHLOG
+  Index: createdAt
+  Index: query + createdAt
+end note
+
+' Relasi
+USER ||--o{ CHAT : "memiliki\n(onDelete: Cascade)"
+USER ||--o{ CHATHISTORY : "memiliki\n(onDelete: Cascade)"
+USER ||--o{ TRANSACTION : "memiliki\n(onDelete: Cascade)"
+USER ||--o{ PROMPTUSAGE : "memiliki\n(onDelete: Cascade)"
+USER ||--o{ SEARCHLOG : "mencatat\n(optional, userId nullable)"
+USER ||--o{ TRENDING : "membuat\n(optional, createdBy nullable)"
+
+CHAT ||--o{ CHATHISTORY : "berisi\n(onDelete: Cascade)"
+
+@enduml
+
+' ============================================================
+' 2. ARSITEKTUR SISTEM
+' ============================================================
+@startuml ARCH
+title Arsitektur Sistem TanyaHukum
+
+skinparam rectangle {
+  FontSize 11
+}
+skinparam component {
+  FontSize 11
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+
+' ── LAYER 1: CLIENT ───────────────────────────────────────
+package "Client Layer" #EEF4FF {
+  component "Browser\n(React 19)" as BROWSER
+  component "Next.js App Router\n(SSR + CSR)" as NEXTJS
+  component "Komponen UI\n(Tailwind CSS)" as UI
+  component "Google Sign-In\nSDK (GSI)" as GSI
+
+  BROWSER --> NEXTJS
+  NEXTJS --> UI
+  BROWSER --> GSI
+}
+
+' ── LAYER 2: API / SERVER ─────────────────────────────────
+package "API Layer (Next.js Route Handlers)" #FFF3E0 {
+  component "middleware.js\n(JWT Auth Guard\nAdmin Protection)" as MW
+
+  package "Auth Routes" #FDEBD0 {
+    component "/api/auth/*\n(register, login\ngoogle, forgot\nreset, logout)" as AUTH
+  }
+
+  package "Core Routes" #FDEBD0 {
+    component "/api/chat\n(RAG Pipeline)" as CHAT
+    component "/api/profile\n(GET/PATCH/DELETE\n/upload)" as PROFILE
+    component "/api/regulations\n(list, detail\ndownload)" as REGS
+    component "/api/dashboard\n(+ 30s cache)" as DASH
+    component "/api/payment\n(checkout, webhook)" as PAY
+  }
+
+  package "Admin Routes" #FDEBD0 {
+    component "/api/admin/*\n(users, regulations\ntrending, stats\nsearch-logs)" as ADMIN
+  }
+
+  MW --> AUTH
+  MW --> CHAT
+  MW --> PROFILE
+  MW --> REGS
+  MW --> DASH
+  MW --> PAY
+  MW --> ADMIN
+}
+
+' ── LAYER 3: DATA ─────────────────────────────────────────
+package "Data Layer" #D5F5E3 {
+  database "PostgreSQL\n(via Supabase)\nPrisma ORM" as DB
+
+  database "Supabase Storage\n- avatars bucket\n- legal-documents bucket" as STORAGE
+
+  component "In-Memory Cache\n(Dashboard 30s\nRate Limiter LRU)" as CACHE
+}
+
+' ── LAYER 4: EXTERNAL SERVICES ────────────────────────────
+package "External Services" #F5EEF8 {
+  component "Google OAuth 2.0\n(verifikasi token\nauto-register)" as GOOGLE
+
+  component "VoyageAI\nvoyage-law-2\n(Text Embedding, cached)" as VOYAGE
+
+  database "Pinecone\nVector DB\n(topK: 50)" as PINECONE
+
+  package "LLM Providers\n(5 model, mode Kilat/Berpikir)" #D6EAF8 {
+    component "Google Gemini API\n3.5 Flash-Lite (default)\n3.6 Flash, 3.5 Flash" as GEMINI
+    component "Groq API\nGPT-OSS 120B, Qwen 3.8\n(konteks 20 potongan)" as GROQ
+  }
+
+  component "Midtrans\n(Snap API + CoreAPI\nSandbox Mode)" as MIDTRANS
+
+  component "Nodemailer\n(Gmail SMTP\nReset Password)" as NODEMAILER
+}
+
+' ── CONNECTIONS ───────────────────────────────────────────
+NEXTJS --> MW : HTTP Request\n(JWT Cookie)
+
+AUTH --> DB : Prisma ORM
+AUTH --> GOOGLE : verifyIdToken
+AUTH --> NODEMAILER : sendResetPasswordEmail
+AUTH --> CACHE : rateLimit (LRU, per IP + per email)
+
+CHAT --> DB : Prisma ORM\n(cek user, kuota PromptUsage\nsimpan Chat+ChatHistory+PromptUsage)
+CHAT --> CACHE : rateLimit (15/menit/user)
+CHAT --> VOYAGE : embedQuery
+CHAT --> PINECONE : query vector
+CHAT --> GEMINI : llm.stream\n(sesuai mode dipilih)
+CHAT --> GROQ : stream (OpenAI-compatible)\n(sesuai mode dipilih)
+GEMINI ..> GEMINI : fallback ke model\nGemini cadangan\n(kuota habis/error 5xx)
+CHAT ..> CHAT : NDJSON stream ke client\n(step, sources, model,\nthinking, text, done)
+
+PROFILE --> DB : Prisma ORM
+PROFILE --> STORAGE : upload avatar
+PROFILE --> MIDTRANS : CoreAPI.status (self-healing)
+
+REGS --> DB : Prisma ORM
+REGS --> STORAGE : fetch PDF (proxy)
+
+DASH --> DB : Prisma ORM
+DASH --> CACHE : in-memory 30s
+
+PAY --> DB : Prisma ORM
+PAY --> MIDTRANS : Snap.createTransaction
+MIDTRANS --> PAY : webhook notifikasi
+
+ADMIN --> DB : Prisma ORM
+ADMIN --> STORAGE : upload PDF
+
+' Note: App menyimpan URL dari STORAGE ke DB (bukan DB → STORAGE)
+
+@enduml
+
+' ============================================================
+' 3. USE CASE DIAGRAM
+' ============================================================
+@startuml USECASE
+title Use Case Diagram — Sistem TanyaHukum
+
+skinparam usecase {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  FontSize 11
+}
+skinparam actor {
+  BackgroundColor #FDEBD0
+  BorderColor #e67e22
+  FontSize 11
+}
+skinparam ArrowColor #2c3e50
+
+left to right direction
+
+' ── Actors ────────────────────────────────────────────────
+actor "Pengguna\n(Guest)" as GUEST
+actor "Pengguna\n(FREE)" as FREE
+actor "Pengguna\n(PRO)" as PRO
+actor "Admin" as ADMIN
+actor "Google OAuth\nServer" as GOOGLE <<system>>
+actor "Midtrans\nGateway" as MIDTRANS <<system>>
+
+FREE --|> GUEST
+PRO --|> FREE
+
+' ── System Boundary ───────────────────────────────────────
+rectangle "Sistem TanyaHukum" {
+
+  ' Auth
+  package "Autentikasi" {
+    usecase "UC-01\nRegistrasi Email" as UC01
+    usecase "UC-02\nLogin Email" as UC02
+    usecase "UC-03\nLogin Google OAuth" as UC03
+    usecase "UC-04\nLupa Password" as UC04
+    usecase "UC-05\nReset Password" as UC05
+    usecase "UC-06\nLogout" as UC06
+  }
+
+  ' Chat
+  package "Chatbot Hukum" {
+    usecase "UC-07\nAjukan Pertanyaan Hukum\n(RAG Pipeline, streaming)" as UC07
+    usecase "UC-08\nLihat Riwayat Chat" as UC08
+    usecase "UC-09\nRename Judul Chat" as UC09
+    usecase "UC-10\nHapus Chat" as UC10
+    usecase "UC-28\nPilih Model & Mode AI\n(5 model x Kilat/Berpikir)" as UC28
+    usecase "UC-29\nHentikan Jawaban\n(Stop)" as UC29
+    usecase "UC-30\nEdit Pertanyaan\nyang Dihentikan" as UC30
+    usecase "UC-31\nSalin Pesan" as UC31
+    usecase "UC-32\nBuka Sumber Sitasi" as UC32
+  }
+
+  ' Data Hukum
+  package "Pusat Data Hukum" {
+    usecase "UC-11\nCari Regulasi" as UC11
+    usecase "UC-12\nLihat Detail Regulasi" as UC12
+    usecase "UC-13\nUnduh Dokumen PDF" as UC13
+  }
+
+  ' Dashboard
+  package "Dashboard" {
+    usecase "UC-14\nLihat Dashboard\n& Statistik" as UC14
+    usecase "UC-15\nLihat Isu Terkini" as UC15
+  }
+
+  ' Profil
+  package "Profil" {
+    usecase "UC-16\nLihat Profil" as UC16
+    usecase "UC-17\nEdit Profil" as UC17
+    usecase "UC-18\nGanti Password" as UC18
+    usecase "UC-19\nUpload Foto Avatar" as UC19
+    usecase "UC-20\nHapus Akun" as UC20
+    usecase "UC-33\nAtur Personalisasi\nGaya Jawaban AI" as UC33
+    usecase "UC-34\nHapus Semua\nRiwayat Chat" as UC34
+  }
+
+  ' Legal
+  package "Dokumen Legal" {
+    usecase "UC-35\nBaca Kebijakan\nPrivasi (ID/EN)" as UC35
+    usecase "UC-36\nBaca Syarat\n& Ketentuan (ID/EN)" as UC36
+  }
+
+  ' Payment
+  package "Pembayaran" {
+    usecase "UC-21\nUpgrade ke PRO\n(Midtrans Snap)" as UC21
+    usecase "UC-22\nTerima Notifikasi\nPembayaran" as UC22
+  }
+
+  ' Admin
+  package "Admin Panel" {
+    usecase "UC-23\nLihat Dashboard\nAdmin & Analitik" as UC23
+    usecase "UC-24\nKelola Pengguna\n(CRUD)" as UC24
+    usecase "UC-25\nKelola Regulasi\n(CRUD + Upload)" as UC25
+    usecase "UC-26\nKelola Isu Terkini\n(CRUD)" as UC26
+    usecase "UC-27\nLihat Log Pencarian" as UC27
+  }
+}
+
+' ── Guest ─────────────────────────────────────────────────
+GUEST --> UC01
+GUEST --> UC02
+GUEST --> UC03
+GUEST --> UC04
+GUEST --> UC05
+GUEST --> UC11
+GUEST --> UC12
+GUEST --> UC13
+GUEST --> UC35
+GUEST --> UC36
+' UC15 hanya untuk user yang login (dashboard butuh auth)
+
+' ── FREE User ─────────────────────────────────────────────
+FREE --> UC06
+FREE --> UC07
+FREE --> UC08
+FREE --> UC09
+FREE --> UC10
+FREE --> UC14
+FREE --> UC16
+FREE --> UC17
+FREE --> UC18
+FREE --> UC19
+FREE --> UC20
+FREE --> UC21
+FREE --> UC28
+FREE --> UC29
+FREE --> UC30
+FREE --> UC31
+FREE --> UC32
+FREE --> UC33
+FREE --> UC34
+
+' ── PRO User (tidak ada batas pertanyaan harian) ──────────
+PRO --> UC07 : tanpa batas harian\n(kuota PromptUsage diabaikan)
+
+' ── Admin ─────────────────────────────────────────────────
+ADMIN --> UC23
+ADMIN --> UC24
+ADMIN --> UC25
+ADMIN --> UC26
+ADMIN --> UC27
+
+' ── System Actors ─────────────────────────────────────────
+GOOGLE --> UC03 : validasi token
+MIDTRANS --> UC22 : webhook notifikasi
+
+' ── Include / Extend ──────────────────────────────────────
+UC07 .> UC08 : <<include>>
+UC07 .> UC28 : <<include>>\npilih model sebelum bertanya
+UC03 .> UC01 : <<extend>>\nauto-register
+UC21 .> UC22 : <<extend>>\nwebhook dipicu Midtrans
+UC04 .> UC05 : <<extend>>\nklik link email
+UC07 .> UC29 : <<extend>>\npengguna menekan Stop
+UC29 .> UC30 : <<extend>>\nedit lalu kirim ulang
+UC07 .> UC32 : <<extend>>\njawaban berisi sitasi
+UC18 .> UC17 : <<include>>
+
+note right of UC07
+  Kuota harian dicek dari tabel
+  PromptUsage (bukan ChatHistory).
+  Jika model pilihan gagal sebelum
+  menulis jawaban (kuota habis /
+  server sibuk), sistem otomatis
+  pindah ke model Gemini cadangan
+  (<<extend>> Fallback Model).
+end note
+
+note "Total 36 use case" as NUC
+
+@enduml
+
+' ============================================================
+' 4. CONTEXT DIAGRAM
+' Batas sistem dan semua entitas eksternal
+' ============================================================
+@startuml CONTEXT
+title Context Diagram — Sistem TanyaHukum
+
+skinparam rectangle {
+  FontSize 11
+  FontStyle bold
+}
+skinparam component {
+  FontSize 12
+  FontStyle bold
+}
+skinparam ArrowColor #2c3e50
+skinparam ArrowFontSize 9
+
+' ── Sistem Pusat ──────────────────────────────────────────
+component "SISTEM\nTANYAHUKUM\n\nPlatform AI Konsultasi Hukum\nBerbasis RAG" as SYS #EEF4FF
+
+' ── Entitas Eksternal ─────────────────────────────────────
+rectangle "Pengguna\n(User FREE/PRO)" as USER #FDEBD0
+rectangle "Admin\n(Pengelola Platform)" as ADMIN #FDEBD0
+
+rectangle "Google OAuth 2.0\nServer" as GOOGLE #F5EEF8
+rectangle "Midtrans\nPayment Gateway" as MIDTRANS #F5EEF8
+rectangle "VoyageAI\n(voyage-law-2\nEmbedding API)" as VOYAGE #F5EEF8
+rectangle "Pinecone\n(Vector Database)" as PINECONE #F5EEF8
+rectangle "Google Gemini API\n(3.5 Flash-Lite, 3.6 Flash\n3.5 Flash)" as GEMINI #F5EEF8
+rectangle "Groq API\n(GPT-OSS 120B\nQwen 3.8)" as GROQ #F5EEF8
+rectangle "Supabase\n(PostgreSQL + Storage)" as SUPABASE #D5F5E3
+rectangle "Gmail SMTP\n(Nodemailer)" as NODEMAILER #F5EEF8
+
+' ── Alur Data: Pengguna ───────────────────────────────────
+USER --> SYS : credential login/register\npertanyaan hukum + mode/model pilihan\npreferensi gaya jawaban\nperintah Stop/Edit\nkeyword pencarian\ndata profil & avatar\nrequest upgrade PRO\nrequest hapus semua riwayat
+SYS --> USER : JWT cookie (sesi login)\nstream jawaban AI + proses (NDJSON)\nsumber hukum bisa diklik\ndaftar & detail regulasi\nbuffer PDF download\ndata profil\nSnap token Midtrans\ndokumen Privasi/Ketentuan (ID/EN)
+
+' ── Alur Data: Admin ──────────────────────────────────────
+ADMIN --> SYS : data regulasi baru (PDF)\ndata isu terkini\nmanajemen user\ntoken JWT admin
+SYS --> ADMIN : statistik platform\ndistribusi user & kategori\nlog pencarian\ndaftar semua user & regulasi
+
+' ── Alur Data: Google OAuth ───────────────────────────────
+SYS --> GOOGLE : Google credential token
+GOOGLE --> SYS : payload user\n(email, name, picture)
+
+' ── Alur Data: Midtrans ───────────────────────────────────
+SYS --> MIDTRANS : parameter transaksi\n(orderId, amount, email)
+MIDTRANS --> SYS : Snap token + redirect_url\nwebhook notifikasi pembayaran\n(status: settlement/capture/failed)
+
+' ── Alur Data: AI Services ────────────────────────────────
+SYS --> VOYAGE : teks pertanyaan user\n(embedding di-cache)
+VOYAGE --> SYS : vector embedding float[1024]
+
+SYS --> PINECONE : query vector (topK: 50)
+PINECONE --> SYS : 50 chunk dokumen hukum\n+ metadata (title, page, text)
+
+SYS --> GEMINI : system prompt + preferensi\n+ pertanyaan user (sesuai mode)
+GEMINI --> SYS : stream jawaban hukum\n(Markdown, opsional ringkasan berpikir)
+
+SYS --> GROQ : system prompt (20 potongan)\n+ pertanyaan user (sesuai mode)
+GROQ --> SYS : stream jawaban hukum\n(fallback ke Gemini bila gagal)
+
+' ── Alur Data: Supabase ───────────────────────────────────
+SYS --> SUPABASE : query SQL (via Prisma ORM)\nupload file (PDF, gambar avatar)
+SUPABASE --> SYS : data hasil query\npublic URL file
+
+' ── Alur Data: Nodemailer ─────────────────────────────────
+SYS --> NODEMAILER : email tujuan + reset URL
+NODEMAILER --> USER : email berisi\nlink reset password
+
+@enduml
+
+' ============================================================
+' 5. SEQUENCE DIAGRAM — LOGIN EMAIL
+' ============================================================
+@startuml SEQ-01-Login
+title Sequence Diagram — Login Email\nPOST /api/auth/login
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 10
+  BoxBackgroundColor #F8F9FA
+}
+
+actor "Pengguna" as USER
+participant "LoginForm\n(React)" as UI
+participant "POST /api/auth/login\n(Route Handler)" as API
+participant "rateLimit\n(LRU Cache)" as RL
+database "PostgreSQL\n(Prisma)" as DB
+participant "bcryptjs" as BCRYPT
+participant "jose\n(JWT)" as JWT
+
+USER -> UI : input email & password\nklik Masuk
+activate UI
+
+UI -> API : POST /api/auth/login\n{email, password}
+activate API
+
+API -> RL : rateLimit(ip, 5, "login")
+activate RL
+RL --> API : allowed / blocked
+deactivate RL
+
+alt Rate limit IP tercapai
+  API --> UI : HTTP 429\n"Terlalu banyak percobaan"
+  UI --> USER : tampil pesan error
+end
+
+API -> API : validateInput(email, password)\n(regex + type check)
+
+alt Validasi gagal
+  API --> UI : HTTP 400\npesan validasi
+  UI --> USER : tampil pesan error
+end
+
+API -> RL : rateLimit(email, 10, "login-email")
+activate RL
+RL --> API : allowed / blocked
+deactivate RL
+
+alt Rate limit per akun tercapai
+  API --> UI : HTTP 429\n"Terlalu banyak percobaan"
+end
+
+API -> DB : user.findUnique(email.toLowerCase())
+activate DB
+DB --> API : user | null
+deactivate DB
+
+API -> BCRYPT : compare(password, user?.passwordHash ?? dummyHash)
+note right of BCRYPT
+  Selalu jalankan bcrypt
+  meski user=null untuk
+  mencegah timing attack
+end note
+activate BCRYPT
+BCRYPT --> API : isValid: boolean
+deactivate BCRYPT
+
+alt !isValid && user ada && password punya spasi di awal/akhir
+  API -> BCRYPT : compare(password.trim(), hash)
+  note right of BCRYPT
+    Perbaikan (BUG-07): registrasi
+    menyimpan password ter-trim,
+    jadi login mencoba lagi versi
+    ter-trim sebelum menolak.
+  end note
+  BCRYPT --> API : isValid: boolean
+end
+
+alt user null atau password tidak cocok
+  API --> UI : HTTP 401\n"Email atau password salah"
+  UI --> USER : tampil pesan error
+end
+
+API -> JWT : SignJWT({userId, email, tier, role})
+activate JWT
+JWT --> API : token string
+deactivate JWT
+
+API --> UI : HTTP 200\nSet-Cookie: token=... (HttpOnly, 7 hari)\n{user: {id, email, tier, role, name, avatarUrl}}
+deactivate API
+
+UI -> UI : localStorage.setItem("user", JSON.stringify(user))
+UI -> UI : dispatchEvent("auth-change")
+UI --> USER : redirect ke /chatbot
+deactivate UI
+
+@enduml
+
+' ============================================================
+' 6. SEQUENCE DIAGRAM — CHAT RAG (FITUR UTAMA)
+' ============================================================
+@startuml SEQ-02-ChatRAG
+title Sequence Diagram — Chat RAG Pipeline (Streaming)\nPOST /api/chat {stream:true}
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 9
+  BoxBackgroundColor #F8F9FA
+}
+
+actor "Pengguna" as USER
+participant "ChatArea\n(React)" as UI
+participant "POST /api/chat\n(streamChatResponse)" as API
+participant "getSession() +\nrateLimit (LRU)" as SESSION
+database "PostgreSQL\n(Prisma: User,\nPromptUsage, Chat,\nChatHistory)" as DB
+participant "VoyageAI\nvoyage-law-2\n(cached)" as VOYAGE
+participant "Pinecone\nVector DB" as PINECONE
+participant "Gemini API /\nGroq API\n(sesuai mode)" as LLM
+
+USER -> UI : pilih model & mode\nketik pertanyaan, klik Kirim
+activate UI
+UI -> UI : tampil loading state\n(tombol Kirim -> Stop)
+
+UI -> API : POST /api/chat\n{message, chatId?, mode, preferences,\nstream:true} [Cookie: token]
+activate API
+
+API -> SESSION : getSession() + rateLimit(userId, 15, "chat")
+activate SESSION
+SESSION --> API : sesi valid? | rate limit OK?
+deactivate SESSION
+
+alt Tidak ada sesi / pesan > 5000 karakter / rate limit
+  API --> UI : HTTP 401 / 400 / 429
+  UI --> USER : tampil pesan error
+end
+
+API -> DB : Promise.all:\nchat.findUnique (jika chatId)\nuser.findUnique\npromptUsage.count (hari ini)
+activate DB
+DB --> API : existingChat, user, chatsTodayCount
+deactivate DB
+
+alt chatId bukan milik user / user tidak ada
+  API --> UI : HTTP 404
+end
+
+alt tier=FREE && chatsTodayCount >= promptLimit
+  API --> UI : HTTP 403\n{limitReached: true}
+  UI --> USER : tampil modal upgrade PRO
+end
+
+API --> UI : NDJSON "step" {search, active}
+API -> VOYAGE : embedQuestion(message)
+activate VOYAGE
+VOYAGE --> API : queryVector float[1024]\n(dari cache bila pertanyaan sama)
+deactivate VOYAGE
+
+API -> PINECONE : index.query(vector, topK: 50)
+activate PINECONE
+PINECONE --> API : matches[]\n(text, title, page, score)
+deactivate PINECONE
+
+API -> API : cleanMatches(): buang duplikat\n& noise OCR (5 teratas tetap)
+API --> UI : NDJSON "sources" {count, used, docs}\n"step" {search, done}
+
+API -> API : bangun systemPrompt\n(konteks + personalContext\n+ preferensi gaya jawaban, whitelist)
+
+loop modelChainFor(mode): model pilihan dulu, lalu cadangan Gemini
+  API --> UI : NDJSON "model" {model, provider,\nmode, fallback}
+  API -> LLM : stream(systemPrompt, message)\n[AbortController.signal]
+  activate LLM
+
+  alt Stop ditekan pengguna
+    USER -> UI : klik Stop
+    UI -> API : reader.cancel()
+    API -> LLM : abortController.abort()
+    note right of API
+      Tidak disimpan ke riwayat.
+      Jika sudah sempat menulis,
+      promptUsage.create tetap jalan
+      (kuota tetap terpakai).
+    end note
+  else Gagal sebelum menulis\n(kuota 429/413 atau server 5xx)
+    LLM --> API : error
+    API -> API : coba model berikutnya\ndi modelChain (fallback=true)
+  else Berhasil menulis
+    LLM --> API : stream "thinking"? + "text" chunks
+    API --> UI : NDJSON "thinking" / "text"\n(tiap chunk)
+  end
+  deactivate LLM
+end
+
+alt Semua model gagal (kuota habis)
+  API --> UI : NDJSON "error"\n"Kuota AI hari ini telah habis"
+end
+
+API -> DB : Promise.all:\n1. promptUsage.create\n2. chatHistory.create (USER)\n3. chatHistory.create (AI)\n4. chat.update(updatedAt)
+activate DB
+DB --> API : saved
+deactivate DB
+
+API --> UI : NDJSON "done"\n{chatId, answer, model, mode, durationMs}
+deactivate API
+
+UI -> UI : render jawaban (react-markdown)\n+ panel Proses + sitasi bisa diklik
+UI --> USER : tampil jawaban AI lengkap
+deactivate UI
+
+@enduml
+
+' ============================================================
+' 7. SEQUENCE DIAGRAM — GOOGLE OAUTH
+' ============================================================
+@startuml SEQ-03-GoogleOAuth
+title Sequence Diagram — Login / Register Google OAuth\nPOST /api/auth/google
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 9
+}
+
+actor "Pengguna" as USER
+participant "LoginForm /\nRegisterForm\n(React)" as UI
+participant "Google GSI\nSDK" as GSI
+participant "Google OAuth\nServer" as GOOGLE
+participant "POST /api/auth/google\n(Route Handler)" as API
+participant "OAuth2Client\n(google-auth-library)" as GCLIENT
+database "PostgreSQL\n(Prisma)" as DB
+participant "jose (JWT)" as JWT
+
+USER -> UI : klik tombol\n"Login with Google"
+activate UI
+
+UI -> GSI : google.accounts.id.initialize\n(client_id, callback)
+activate GSI
+UI -> GSI : renderButton(container)
+
+GSI --> USER : tampil tombol Google
+USER -> GSI : klik tombol
+
+GSI -> GOOGLE : buka popup pilih akun Google
+activate GOOGLE
+USER -> GOOGLE : pilih akun
+GOOGLE --> GSI : credential token (JWT)
+deactivate GOOGLE
+
+GSI -> UI : callback(response.credential)
+deactivate GSI
+
+UI -> API : POST /api/auth/google\n{credentialToken}
+activate API
+
+API -> GCLIENT : verifyIdToken({idToken, audience})
+activate GCLIENT
+GCLIENT -> GOOGLE : verifikasi token
+GOOGLE --> GCLIENT : payload valid | throw error
+deactivate GCLIENT
+
+alt Token palsu / expired
+  API --> UI : HTTP 401\n"Token tidak valid"
+  UI --> USER : tampil error
+end
+
+API -> API : ambil email, name, picture\ndari payload
+
+API -> DB : user.findUnique({email})
+activate DB
+DB --> API : user | null
+deactivate DB
+
+alt User belum terdaftar
+  API -> DB : user.create(\n  email, name, avatarUrl: picture\n  authProvider: GOOGLE\n  tier: FREE, role: USER\n)
+  activate DB
+  DB --> API : user baru
+  deactivate DB
+else User sudah ada
+  note over API : gunakan data user yang ada
+end
+
+API -> JWT : SignJWT({userId, email, tier, role})
+activate JWT
+JWT --> API : token string
+deactivate JWT
+
+API --> UI : HTTP 200\nSet-Cookie: token=... (HttpOnly)\n{user: {id, email, tier, role, name, avatarUrl}}
+deactivate API
+
+UI -> UI : localStorage.setItem("user", ...)\ndispatchEvent("auth-change")
+UI --> USER : redirect ke /chatbot
+deactivate UI
+
+@enduml
+
+' ============================================================
+' 8. SEQUENCE DIAGRAM — PAYMENT UPGRADE PRO
+' ============================================================
+@startuml SEQ-04-Payment
+title Sequence Diagram — Payment Upgrade PRO\nMidtrans Snap + Webhook
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 9
+}
+
+actor "Pengguna" as USER
+participant "Frontend\n(React)" as UI
+participant "POST /api/payment\n/checkout" as CHECKOUT
+participant "POST /api/payment\n/webhook" as WEBHOOK
+participant "GET /api/profile\n(self-healing)" as PROFILE
+database "PostgreSQL\n(Prisma)" as DB
+participant "Midtrans\nSnap API" as SNAP
+participant "Midtrans\nCoreAPI" as CORE
+
+USER -> UI : klik "Upgrade ke PRO"
+activate UI
+
+UI -> CHECKOUT : POST {userId}
+activate CHECKOUT
+
+CHECKOUT -> DB : user.findUnique(userId)
+activate DB
+DB --> CHECKOUT : {email, tier}
+deactivate DB
+
+alt User sudah PRO
+  CHECKOUT --> UI : HTTP 400
+  UI --> USER : "Sudah berlangganan PRO"
+end
+
+CHECKOUT -> CHECKOUT : generate orderId\n= TRX-{timestamp}-{userId[:5]}
+
+CHECKOUT -> DB : transaction.create\n{orderId, PENDING, 49900}
+activate DB
+DB --> CHECKOUT : ok
+deactivate DB
+
+CHECKOUT -> SNAP : createTransaction\n{orderId, amount, email}
+activate SNAP
+SNAP --> CHECKOUT : {token, redirect_url}
+deactivate SNAP
+
+CHECKOUT -> DB : transaction.update\n{paymentUrl: redirect_url}
+activate DB
+DB --> CHECKOUT : ok
+deactivate DB
+
+CHECKOUT --> UI : HTTP 200\n{token, redirect_url}
+deactivate CHECKOUT
+
+UI -> UI : buka Midtrans Snap popup\n(window.snap.pay(token))
+USER -> UI : lakukan pembayaran\n(transfer/e-wallet/kartu)
+
+note over UI, SNAP
+  Pengguna menyelesaikan pembayaran
+  di popup Midtrans Snap
+end note
+
+== Notifikasi Webhook (Async) ==
+
+SNAP -> WEBHOOK : POST\n{order_id, transaction_status\nfraud_status, signature_key}
+activate WEBHOOK
+
+WEBHOOK -> WEBHOOK : verifikasi SHA512 signature\n(prod only)
+
+WEBHOOK -> WEBHOOK : mapping status:\ncapture/settlement → SUCCESS\nfraud=challenge → PENDING\ncancel/deny/expire → FAILED
+
+WEBHOOK -> DB : transaction.findUnique(orderId)
+activate DB
+DB --> WEBHOOK : transaction + userId
+deactivate DB
+
+alt Sudah SUCCESS (idempotency)
+  WEBHOOK --> SNAP : HTTP 200 "Already processed"
+end
+
+alt finalStatus = SUCCESS
+  WEBHOOK -> DB : $transaction([\n  transaction.update(SUCCESS)\n  user.update(tier=PRO, promptLimit=0)\n])
+  activate DB
+  DB --> WEBHOOK : ok (atomic)
+  deactivate DB
+else FAILED / PENDING
+  WEBHOOK -> DB : transaction.update(finalStatus)
+  activate DB
+  DB --> WEBHOOK : ok
+  deactivate DB
+end
+
+WEBHOOK --> SNAP : HTTP 200 "OK"
+deactivate WEBHOOK
+
+== Self-Healing (jika webhook terlambat) ==
+
+USER -> UI : buka halaman profil
+UI -> PROFILE : GET /api/profile
+activate PROFILE
+
+PROFILE -> DB : user.findUnique + transaction.findFirst(PENDING)
+activate DB
+DB --> PROFILE : user (tier=FREE) + pendingTx
+deactivate DB
+
+PROFILE -> CORE : transaction.status(orderId)
+activate CORE
+CORE --> PROFILE : {transaction_status: "settlement"}
+deactivate CORE
+
+PROFILE -> DB : $transaction([\n  transaction.update(SUCCESS)\n  user.update(tier=PRO)\n])
+activate DB
+DB --> PROFILE : ok
+deactivate DB
+
+PROFILE --> UI : HTTP 200\n{tier: "PRO"}
+deactivate PROFILE
+
+UI --> USER : tampil badge PRO
+deactivate UI
+
+@enduml
+
+' ============================================================
+' 9. SEQUENCE DIAGRAM — RESET PASSWORD
+' ============================================================
+@startuml SEQ-05-ResetPassword
+title Sequence Diagram — Lupa & Reset Password
+
+skinparam sequence {
+  ActorBackgroundColor #FDEBD0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 9
+}
+
+actor "Pengguna" as USER
+participant "ForgotPassword\nForm" as UI1
+participant "ResetPassword\nForm" as UI2
+participant "POST /api/auth\n/forgot-password" as API1
+participant "POST /api/auth\n/reset-password" as API2
+participant "crypto\n(Node.js)" as CRYPTO
+database "PostgreSQL\n(Prisma)" as DB
+participant "Nodemailer\n(SMTP)" as MAIL
+participant "bcryptjs" as BCRYPT
+
+USER -> UI1 : masukkan email
+activate UI1
+
+UI1 -> API1 : POST {email}
+activate API1
+
+API1 -> API1 : cek rate limit\n(maks 3/15 menit)
+
+API1 -> DB : user.findUnique({email})
+activate DB
+DB --> API1 : user | null
+deactivate DB
+
+note over API1
+  Apapun hasilnya (user ada/tidak)
+  response selalu HTTP 200 generik
+  untuk mencegah user enumeration
+end note
+
+alt User ditemukan
+  API1 -> CRYPTO : randomBytes(32).toString('hex')
+  activate CRYPTO
+  CRYPTO --> API1 : resetToken (plaintext)
+  deactivate CRYPTO
+
+  API1 -> CRYPTO : SHA256(resetToken) → hashedToken
+  activate CRYPTO
+  CRYPTO --> API1 : hashedToken
+  deactivate CRYPTO
+
+  API1 -> DB : user.update({\n  resetToken: hashedToken\n  resetTokenExpiry: now+1jam\n})
+  activate DB
+  DB --> API1 : ok
+  deactivate DB
+
+  API1 -> MAIL : sendResetPasswordEmail(\n  to: email\n  url: /reset-password?token=resetToken\n)
+  activate MAIL
+  MAIL --> USER : email berisi link reset
+  deactivate MAIL
+end
+
+API1 --> UI1 : HTTP 200\n"Jika email terdaftar, link telah dikirim"
+deactivate API1
+UI1 --> USER : tampil pesan generik
+deactivate UI1
+
+USER -> UI2 : klik link di email\nmasukkan password baru
+activate UI2
+
+UI2 -> API2 : POST {token, newPassword}
+activate API2
+
+alt Token/password kosong
+  API2 --> UI2 : HTTP 400
+end
+
+alt Password < 8 karakter
+  API2 --> UI2 : HTTP 400
+end
+
+API2 -> CRYPTO : SHA256(token)
+activate CRYPTO
+CRYPTO --> API2 : hashedToken
+deactivate CRYPTO
+
+API2 -> DB : user.findFirst({\n  resetToken: hashedToken\n  resetTokenExpiry > now()\n})
+activate DB
+DB --> API2 : user | null
+deactivate DB
+
+alt Token tidak valid / expired
+  API2 --> UI2 : HTTP 400\n"Token tidak valid"
+end
+
+API2 -> BCRYPT : hash(newPassword, 12)
+activate BCRYPT
+BCRYPT --> API2 : passwordHash baru
+deactivate BCRYPT
+
+API2 -> DB : user.update({\n  passwordHash: baru\n  resetToken: null\n  resetTokenExpiry: null\n})
+activate DB
+DB --> API2 : ok
+deactivate DB
+
+API2 --> UI2 : HTTP 200\n"Password berhasil diubah"
+deactivate API2
+
+UI2 --> USER : redirect ke halaman login
+deactivate UI2
+
+@enduml
+
+' ============================================================
+' 10. SEQUENCE DIAGRAM — UPLOAD REGULASI (ADMIN)
+' ============================================================
+@startuml SEQ-06-AdminUpload
+title Sequence Diagram — Admin Tambah Regulasi\n(2 Langkah: Upload File → Simpan Metadata)
+
+skinparam sequence {
+  ActorBackgroundColor #FFF3E0
+  ActorBorderColor #e67e22
+  ParticipantBackgroundColor #EEF4FF
+  ParticipantBorderColor #2f6fed
+  LifeLineBorderColor #2c3e50
+  ArrowColor #2c3e50
+  ArrowFontSize 9
+}
+
+actor "Admin" as ADMIN
+participant "Admin Panel\n(React)" as UI
+participant "middleware.js\n(JWT Guard)" as MW
+participant "POST /api/admin\n/regulations/upload" as UPLOAD_API
+participant "POST /api/admin\n/regulations" as CREATE_API
+participant "Supabase\nAdminClient" as SUPABASE
+database "PostgreSQL\n(Prisma)" as DB
+
+ADMIN -> UI : pilih file PDF\nisi metadata (title, category, description)
+activate UI
+
+== Langkah 1: Upload File PDF ke Supabase Storage ==
+
+UI -> MW : POST FormData {file}\n[Cookie: token=admin_jwt]
+activate MW
+MW -> MW : jwtVerify(token)\ncek role === ADMIN
+alt Tidak authorized
+  MW --> UI : HTTP 401/403
+  UI --> ADMIN : tampil error
+end
+MW --> UPLOAD_API : teruskan request
+deactivate MW
+activate UPLOAD_API
+
+UPLOAD_API -> UPLOAD_API : formData.get("file")
+alt File tidak ada
+  UPLOAD_API --> UI : HTTP 400 "File wajib diunggah"
+end
+
+UPLOAD_API -> UPLOAD_API : validasi file.type === "application/pdf"
+alt Bukan PDF
+  UPLOAD_API --> UI : HTTP 400 "File harus PDF"
+end
+
+UPLOAD_API -> SUPABASE : storage.listBuckets()\n→ cek bucket "legal-documents" ada
+activate SUPABASE
+SUPABASE --> UPLOAD_API : buckets[]
+deactivate SUPABASE
+
+UPLOAD_API -> SUPABASE : storage.upload(\n  "{Date.now()}_{safeFileName}"\n  buffer, {upsert: false}\n)
+activate SUPABASE
+SUPABASE --> UPLOAD_API : {data} | {error}
+deactivate SUPABASE
+
+alt Upload gagal
+  UPLOAD_API --> UI : HTTP 500
+end
+
+UPLOAD_API -> SUPABASE : storage.getPublicUrl(uniqueFileName)
+activate SUPABASE
+SUPABASE --> UPLOAD_API : publicUrl
+deactivate SUPABASE
+
+UPLOAD_API --> UI : HTTP 200\n{fileUrl, fileName, fileSize}
+deactivate UPLOAD_API
+
+note over UI
+  Frontend menyimpan fileUrl yang diterima
+  untuk dipakai di langkah selanjutnya
+end note
+
+== Langkah 2: Simpan Metadata Regulasi ke Database ==
+
+UI -> MW : POST {title, description, fileUrl\ncategory, fileSize, fileName}\n[Cookie: token=admin_jwt]
+activate MW
+MW -> MW : jwtVerify(token)\ncek role === ADMIN
+MW --> CREATE_API : teruskan request
+deactivate MW
+activate CREATE_API
+
+CREATE_API -> CREATE_API : validasi title && fileUrl wajib ada
+alt Data tidak lengkap
+  CREATE_API --> UI : HTTP 400
+end
+
+CREATE_API -> DB : regulation.create({\n  title, description, fileUrl\n  category, fileSize, fileName\n  isActive: true\n})
+activate DB
+DB --> CREATE_API : regulation baru
+deactivate DB
+
+CREATE_API --> UI : HTTP 200\n{regulation}
+deactivate CREATE_API
+
+UI --> ADMIN : tampil notifikasi sukses\nregulasi muncul di daftar
+deactivate UI
+
+@enduml
