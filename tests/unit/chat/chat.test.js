@@ -417,12 +417,15 @@ describe('POST /api/chat — mode streaming', () => {
     expect(res.headers.get('Content-Type')).toContain('ndjson');
 
     const events = await parseEvents(res);
-    const types = events.map((e) => (e.type === 'step' ? `${e.step}:${e.state}` : e.type));
+    // Teks dikirim lewat penjaga output yang menahan ±96 karakter terakhir (pemeriksaan
+    // kebocoran), sehingga potongan pendek bisa tergabung menjadi satu event "text".
+    const types = events.map((e) => (e.type === 'step' ? `${e.step}:${e.state}` : e.type)).filter((t, i, arr) => !(t === 'text' && arr[i - 1] === 'text'));
     expect(types).toEqual([
       'search:active', 'sources', 'search:done',
       'think:active', 'model', 'thinking', 'think:done', 'write:active',
-      'text', 'text', 'write:done', 'done',
+      'text', 'write:done', 'done',
     ]);
+    expect(events.filter((e) => e.type === 'text').map((e) => e.text).join('')).toBe('PKWT paling lama 5 tahun.');
 
     const sources = events.find((e) => e.type === 'sources');
     expect(sources.count).toBe(3);
@@ -456,17 +459,20 @@ describe('POST /api/chat — mode streaming', () => {
     expect(global.__llmCalls[0].thinkingConfig).toEqual({ includeThoughts: true });
   });
 
-  test('TC-CHAT-30: kuota model utama habis → otomatis pakai model cadangan, jawaban tetap tersimpan', async () => {
+  test('TC-CHAT-30: kuota model utama habis → otomatis pakai model cadangan berikutnya (urutan Ragas), jawaban tetap tersimpan', async () => {
     mockStreamingServices({ chunks: ['Jawaban dari cadangan.'], failModels: ['gemini-3.6-flash'] });
     const prismaMock = prismaFor();
     const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: SESSION_U1 });
+    const { buildModelChain } = await import('@/lib/modelRouter');
+    const expectedBackup = buildModelChain('deep', { env: {} })[1]; // cadangan Gemini pertama untuk mode Berpikir
     const events = await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true } })));
 
     const models = events.filter((e) => e.type === 'model');
-    expect(models.map((m) => [m.model, m.fallback])).toEqual([['gemini-3.6-flash', false], ['gemini-3.5-flash-lite', true]]);
-    // Gemini 3.x mode mendalam: budget eksplisit (budget 0 ditolak API untuk 3.x)
-    expect(global.__llmCalls[1].thinkingConfig).toEqual({ includeThoughts: true, thinkingBudget: 1024 });
-    expect(events.at(-1)).toMatchObject({ type: 'done', model: 'gemini-3.5-flash-lite', answer: 'Jawaban dari cadangan.' });
+    expect(models.map((m) => [m.model, m.fallback])).toEqual([['gemini-3.6-flash', false], [expectedBackup.model, true]]);
+    expect(expectedBackup.thinking).toBe(true); // cadangan dengan jenis mode yang sama (Berpikir)
+    // Pengguna diberi tahu, tanpa perlu mengirim ulang
+    expect(events.find((e) => e.type === 'fallback')).toMatchObject({ fromLabel: 'Gemini 3.6 Flash · Berpikir', toLabel: expectedBackup.label, restarted: false });
+    expect(events.at(-1)).toMatchObject({ type: 'done', model: expectedBackup.model, answer: 'Jawaban dari cadangan.' });
     expect(prismaMock.chatHistory.create).toHaveBeenCalledTimes(2);
   });
 

@@ -36,6 +36,7 @@ export default function SubscriptionList({ user, onComplete }) {
       name: "Pro",
       price: "Rp 49.900,00",
       benefits: [
+        "Berlaku 30 hari, tidak diperpanjang otomatis",
         "Prompt chatbot tanpa batas",
         "Pencarian dokumen tanpa batas",
         "Memori diperluas di seluruh obrolan",
@@ -296,7 +297,7 @@ export default function SubscriptionList({ user, onComplete }) {
                 Pembayaran Berhasil!
               </p>
               <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1 transition-colors">
-                Akun Anda sekarang aktif sebagai PRO
+                Paket PRO aktif selama 30 hari. Cek tanggal berakhir di Profil › Penggunaan.
               </p>
             </div>
           </div>

@@ -21,7 +21,8 @@ model User {
   role             Role            @default(USER)
   personalContext  String?
   tier             Tier            @default(FREE)
-  promptLimit      Int             @default(50)
+  promptLimit      Int             @default(10)
+  proExpiresAt     DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   chats            Chat[]
@@ -56,12 +57,31 @@ model ChatHistory {
 // Catatan pemakaian kuota pertanyaan. Sengaja TIDAK terhubung ke Chat, sehingga menghapus
 // riwayat chat tidak mengembalikan kuota harian (sebelumnya kuota dihitung dari ChatHistory).
 model PromptUsage {
-  id        String   @id @default(uuid())
-  userId    String
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid())
+  userId       String
+  createdAt    DateTime @default(now())
+  model        String?
+  mode         String?
+  inputTokens  Int?
+  outputTokens Int?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+// Status ketersediaan model (dibagi antar instance server) untuk halaman Penggunaan
+model ModelStatus {
+  model             String    @id
+  provider          String
+  limitRequests     Int?
+  remainingRequests Int?
+  limitTokens       Int?
+  remainingTokens   Int?
+  resetTokens       String?
+  observedAt        DateTime?
+  cooldownUntil     DateTime?
+  cooldownReason    String?
+  updatedAt         DateTime  @updatedAt
 }
 
 model Transaction {

@@ -98,7 +98,7 @@ export default function ProcessPanel({ process }) {
               {process.provider === "groq" && process.contextChunks ? <> · membaca {process.contextChunks} potongan teratas (batas gratis Groq)</> : null}
               {process.fallback && (
                 <p className="mt-1 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400">
-                  Kuota model utama sedang habis, jawaban dibuat dengan model cadangan.
+                  Model pilihan Anda sedang tidak tersedia, jawaban dibuat dengan model cadangan.
                 </p>
               )}
             </li>

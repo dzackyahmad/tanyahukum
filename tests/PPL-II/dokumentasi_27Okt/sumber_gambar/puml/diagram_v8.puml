@@ -1,0 +1,292 @@
+'==============================================================
+' DIAGRAM PENGEMBANGAN v8 — TANYAHUKUM (27 Oktober 2026)
+'==============================================================
+
+@startuml D01_alur_chat_v8
+title D01 · Alur POST /api/chat (streaming) versi 8
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+skinparam PartitionBackgroundColor #FAFBFF
+skinparam ActivityStartColor #2f6fed
+skinparam ActivityEndColor #e74c3c
+
+start
+:Pengguna mengirim pertanyaan\n{message, mode, preferences, stream:true};
+partition "Gerbang (sebelum AI)" {
+  :Verifikasi sesi JWT, validasi input,\nrate limit 15/menit;
+  :Cek kuota harian\n(PRO aktif = tanpa batas,\nBasic / PRO berakhir = 10/hari);
+  if (Kuota habis?) then (ya)
+    :403 limitReached;
+    stop
+  endif
+  :detectPromptAttack(message);
+  if (Minta prompt sistem /\nkredensial / konfigurasi?) then (ya)
+    :Jawaban tetap "tidak dapat\nmembagikan informasi internal";
+    note right: AI tidak dipanggil,\nkuota tidak terpakai,\ntidak disimpan
+    stop
+  endif
+  :classifyQuestion → umum / spesifik;
+}
+partition "Retrieval" {
+  :Embedding Voyage (cache)\n→ Pinecone topK 50 → saring noise;
+  :assessEvidence(skor teratas)\n→ cukup / terbatas / tidak_ada;
+}
+partition "Generasi" {
+  :Susun prompt:\nsistem = aturan saja\npengguna = blok data berbatas acak;
+  :buildModelChain(mode)\n(urutan Ragas + cooldown);
+  repeat
+    :Panggil model (stream)\n+ batas waktu 45/30 dtk;
+    :Penjaga output memeriksa\nsetiap potongan teks;
+  repeat while (Model gagal?) is (ya: reset + event fallback\n→ model berikutnya)
+  ->tidak;
+}
+partition "Setelah jawaban selesai" {
+  if (Output memuat rahasia?) then (ya)
+    :Ganti pesan aman,\ntidak disimpan;
+    stop
+  endif
+  :Verifikasi kutipan sumber\n+ catatan konsultasi (spesifik);
+  :Simpan Chat, ChatHistory,\nPromptUsage {model, mode, token};
+  :Event done;
+}
+stop
+@enduml
+
+@startuml D02_sequence_chat_v8
+title D02 · Sequence diagram chat streaming v8
+skinparam sequenceMessageAlign center
+skinparam ParticipantBackgroundColor #EEF4FF
+skinparam ParticipantBorderColor #2f6fed
+autonumber
+actor Pengguna
+participant "ChatArea\n(browser)" as UI
+participant "/api/chat" as API
+participant "aiSecurity\nlegalGuardrails" as G
+participant "Voyage +\nPinecone" as RAG
+participant "modelRouter" as R
+participant "Gemini / Groq" as LLM
+database "PostgreSQL" as DB
+
+Pengguna -> UI : Ketik pertanyaan
+UI -> API : POST {message, mode, stream:true}
+API -> DB : user, kuota hari ini (PromptUsage)
+API -> G : detectPromptAttack, classifyQuestion
+alt permintaan informasi internal
+  G --> API : block
+  API --> UI : text (pesan tetap) + done{blocked}
+else pertanyaan biasa
+  API -> RAG : embed + query topK 50
+  RAG --> API : potongan + skor
+  API -> G : assessEvidence
+  API --> UI : step / sources
+  API -> R : buildModelChain(mode)
+  loop setiap model di rantai sampai berhasil
+    API -> LLM : stream(system, blok data)
+    alt gagal (kuota, 5xx, timeout)
+      LLM --> API : error
+      API -> R : markCooldown(model)
+      API -> DB : ModelStatus.cooldownUntil
+      API --> UI : reset (bila sudah menulis) + fallback{dari, ke, alasan}
+    else berhasil
+      LLM --> API : thinking / text / usage
+      API -> G : penjaga output (per potongan)
+      API --> UI : thinking / text
+    end
+  end
+  API -> G : verifikasi kutipan + catatan konsultasi
+  API --> UI : text (catatan, bila ada)
+  API -> DB : Chat + ChatHistory + PromptUsage{model, token}
+  API -> DB : ModelStatus (sisa batas Groq)
+  API --> UI : done
+end
+@enduml
+
+@startuml D03_fallback_cooldown
+title D03 · Fallback otomatis & cooldown model
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+
+start
+:Rantai = mode pilihan pengguna\n+ mode lain urut skor Ragas\n(jenis Kilat/Berpikir yang sama didahulukan,\nsatu model sekali, Groq dilewati tanpa key);
+:Model yang sedang cooldown\ndipindah ke urutan terakhir;
+if (Mode pilihan sedang cooldown?) then (ya)
+  :Kirim event fallback\n"baru saja mencapai batas penggunaan";
+endif
+while (Masih ada model di rantai?) is (ya)
+  :Panggil model (stream);
+  if (Berhasil sampai selesai?) then (ya)
+    :Simpan jawaban;
+    stop
+  endif
+  :classifyModelError(err);
+  switch (Jenis error)
+  case (limit 429/413)
+    :cooldown = Retry-After\natau 60 dtk / 15 menit (harian);
+  case (transient 5xx)
+    :cooldown 20 dtk;
+  case (timeout)
+    :cooldown 30 dtk;
+  case (auth 401/403)
+    :cooldown 10 menit;
+  case (Stop pengguna)
+    :Hentikan, tanpa fallback;
+    stop
+  endswitch
+  if (Teks sudah tampil?) then (ya)
+    :Event reset\n(hapus teks setengah jadi);
+  endif
+  :Event fallback {dari, ke, alasan,\nrestarted};
+endwhile (habis)
+:Error "Kuota semua model AI\nsedang habis…" (tidak disimpan);
+stop
+@enduml
+
+@startuml D04_lapisan_keamanan_ai
+title D04 · Lapisan keamanan AI (defense in depth)
+skinparam rectangle {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  RoundCorner 12
+}
+skinparam ArrowColor #2c3e50
+
+rectangle "Input pengguna\n(pertanyaan, konteks personal, preferensi)" as IN #FFFFFF
+rectangle "Lapis 1 · Validasi & pencegatan server\n• panjang ≤ 5000, preferensi whitelist\n• detectPromptAttack: prompt sistem / API key / .env → diblok\n• pola jailbreak → ditandai (peringatan di prompt)" as L1
+rectangle "Lapis 2 · Pemisahan instruksi vs data\n• prompt sistem = aturan saja + hierarki instruksi\n• dokumen, konteks personal, pertanyaan → blok data\n  dengan batas acak per request\n• tag palsu di teks dinetralkan" as L2
+rectangle "Dokumen hasil retrieval\n(tidak tepercaya)" as DOC #FFFFFF
+rectangle "Model AI\n(Gemini / Groq)" as LLM #FFF7E6
+rectangle "Lapis 3 · Penjaga output (streaming)\n• tahan 96 karakter terakhir\n• canary per request, nilai rahasia .env,\n  pola kunci (Google, Groq, JWT, URL DB, private key),\n  ≥ 2 penggalan prompt sistem\n→ ganti pesan aman, tidak disimpan" as L3
+rectangle "Lapis 4 · Guardrail jawaban\n• verifikasi kutipan sumber\n• catatan konsultasi (pertanyaan spesifik)" as L4
+rectangle "Jawaban ke pengguna" as OUT #FFFFFF
+
+IN --> L1
+L1 --> L2
+DOC --> L2
+L2 --> LLM
+LLM --> L3
+L3 --> L4
+L4 --> OUT
+@enduml
+
+@startuml D05_guardrail_hukum
+title D05 · Guardrail jawaban hukum
+skinparam ActivityBackgroundColor #EEF4FF
+skinparam ActivityBorderColor #2f6fed
+skinparam ArrowColor #2f6fed
+
+start
+:classifyQuestion(pertanyaan);
+if (Ada tanda situasi pribadi / penilaian hasil /\nstrategi / hitungan untuk dirinya?) then (ya)
+  :Jenis = SPESIFIK;
+else (tidak)
+  :Jenis = UMUM;
+endif
+:assessEvidence(skor Pinecone teratas);
+if (skor < 0,50) then (tidak_ada)
+  :Prompt: dilarang menjawab\ndari pengetahuan umum;
+elseif (skor < 0,57) then (terbatas)
+  :Prompt: peringatan lunak,\nnyatakan keterbatasan bila perlu;
+else (cukup)
+  :Tanpa catatan tambahan;
+endif
+:Model menjawab dari dokumen\n(aturan 1: jangan mengarang;\naturan 6: spesifik tetap dijawab,\ntanpa kepastian hasil);
+:findUnverifiedCitations(jawaban, judul dokumen);
+if (Ada kutipan tidak cocok?) then (ya)
+  :Tambah "Catatan sistem:\nbelum dapat diverifikasi";
+endif
+if (Jenis = SPESIFIK?) then (ya)
+  :Tambah catatan "bukan pengganti\nkonsultasi advokat / LBH / Posbakum";
+endif
+:Simpan & kirim jawaban;
+stop
+@enduml
+
+@startuml D06_paket_pro_30_hari
+title D06 · Siklus paket PRO 30 hari
+skinparam state {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+}
+[*] --> Basic
+Basic : batas 10 pertanyaan/hari
+Basic --> Pro30 : pembayaran sukses\n(webhook / sinkronisasi profil)\nproExpiresAt = sekarang + 30 hari
+Pro30 : tanpa batas harian\nproExpiresAt terisi
+Pro30 --> Pro30 : beli lagi saat aktif\nproExpiresAt + 30 hari
+Pro30 --> Basic : proExpiresAt lewat\n(diturunkan saat membuka aplikasi /\nbertanya, promptLimit = 10)
+ProTanpaBatas : PRO lama / pemberian admin\nproExpiresAt kosong
+[*] --> ProTanpaBatas : data sebelum v8
+ProTanpaBatas --> Basic : admin mengubah tier
+Basic --> ProTanpaBatas : admin mengubah tier ke PRO
+@enduml
+
+@startuml D07_erd_perubahan_v8
+title D07 · Perubahan skema database v8 (hanya penambahan)
+skinparam linetype ortho
+entity User {
+  * id : String <<PK>>
+  --
+  tier : Tier
+  promptLimit : Int = **10** (sebelumnya 50)
+  **proExpiresAt : DateTime?** <<baru>>
+  ...
+}
+entity PromptUsage {
+  * id : String <<PK>>
+  --
+  userId : String <<FK>>
+  createdAt : DateTime
+  **model : String?** <<baru>>
+  **mode : String?** <<baru>>
+  **inputTokens : Int?** <<baru>>
+  **outputTokens : Int?** <<baru>>
+}
+entity ModelStatus <<tabel baru>> {
+  * model : String <<PK>>
+  --
+  provider : String
+  limitRequests / remainingRequests : Int?
+  limitTokens / remainingTokens : Int?
+  resetTokens : String?
+  observedAt : DateTime?
+  cooldownUntil : DateTime?
+  cooldownReason : String?
+  updatedAt : DateTime
+}
+User ||--o{ PromptUsage : "onDelete: Cascade"
+@enduml
+
+@startuml D08_data_halaman_penggunaan
+title D08 · Sumber data halaman Penggunaan (GET /api/usage)
+skinparam rectangle {
+  BackgroundColor #EEF4FF
+  BorderColor #2f6fed
+  RoundCorner 10
+}
+skinparam database {
+  BackgroundColor #D5F5E3
+  BorderColor #27ae60
+}
+database "User\n(tier, promptLimit,\nproExpiresAt)" as U
+database "PromptUsage\n(hari ini & 30 hari,\nper model, token)" as PU
+database "Transaction\n(pembayaran terakhir)" as TX
+database "ModelStatus\n(cooldown, sisa Groq)" as MS
+rectangle "/api/chat" as CHAT
+rectangle "GET /api/usage\n(wajib login, data sendiri)" as API
+rectangle "Kartu Paket\n[Aktual]" as C1
+rectangle "Pertanyaan hari ini\n[Aktual]" as C2
+rectangle "Model yang Anda pakai\n[Aktual]" as C3
+rectangle "Status model\n[Estimasi]" as C4
+
+CHAT --> PU : catat model + token\nsetiap jawaban
+CHAT --> MS : cooldown & header\nx-ratelimit Groq
+U --> API
+PU --> API
+TX --> API
+MS --> API
+API --> C1
+API --> C2
+API --> C3
+API --> C4
+@enduml

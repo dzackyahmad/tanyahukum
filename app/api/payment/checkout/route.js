@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Midtrans from "midtrans-client";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { PRO_PRICE, PRO_DURATION_DAYS } from "@/lib/subscription";
 
 const snap = new Midtrans.Snap({
   // Default sandbox (perilaku lama). Set MIDTRANS_IS_PRODUCTION=true saat go-live.
@@ -28,20 +29,21 @@ export async function POST(req) {
     // 1. Cari data User di Database untuk mengambil Email dan Tier-nya
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true, tier: true }
+      select: { email: true, tier: true, proExpiresAt: true }
     });
 
     if (!user) {
       return NextResponse.json({ error: "User tidak ditemukan" }, { status: 404 });
     }
 
-    // Cek apakah user sudah PRO — tidak perlu bayar lagi
-    if (user.tier === "PRO") {
-      return NextResponse.json({ error: "Anda sudah berlangganan PRO." }, { status: 400 });
+    // PRO tanpa tanggal berakhir (paket lama / diberikan admin) tidak perlu membayar.
+    // PRO 30 hari boleh memperpanjang (ditambahkan dari tanggal berakhir).
+    if (user.tier === "PRO" && !user.proExpiresAt) {
+      return NextResponse.json({ error: "Anda sudah berlangganan PRO tanpa batas waktu." }, { status: 400 });
     }
 
     // 2. Definisikan Harga & Order ID
-    const amount = 49900; 
+    const amount = PRO_PRICE;
     const orderId = `TRX-${Date.now()}-${userId.substring(0, 5)}`;
 
     // 3. Buat Transaksi di Database kita (Status PENDING)
@@ -64,7 +66,7 @@ export async function POST(req) {
         id: "PRO-TIER-1",
         price: amount,
         quantity: 1,
-        name: "Langganan PRO TanyaHukum"
+        name: `Langganan PRO TanyaHukum ${PRO_DURATION_DAYS} hari`
       }],
       customer_details: {
         email: user.email,

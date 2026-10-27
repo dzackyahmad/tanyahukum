@@ -3,6 +3,7 @@ import ProfileCard from "./ProfileCard";
 import { getProfile, updateProfile, logout, deleteAccount } from "@/src/lib/profile";
 import { deleteAllChats } from "@/src/lib/chat";
 import LogoutConfirmModal from "./LogoutConfirmModal";
+import UsagePanel from "./UsagePanel";
 import { createPortal } from "react-dom";
 import { useTheme } from "@/components/shared/ThemeProvider";
 import { LEGAL_PATHS } from "@/components/features/legal/legalContent";
@@ -102,6 +103,7 @@ export default function ProfileModal({ isOpen, onClose, user }) {
     { id: "personalisasi", label: "Personalisasi", icon: null },
     { id: "tampilan", label: "Tampilan", icon: null },
     { id: "keamanan", label: "Keamanan", icon: null },
+    { id: "penggunaan", label: "Penggunaan", icon: null },
     { id: "akun", label: "Akun", icon: null },
   ];
 
@@ -233,6 +235,16 @@ export default function ProfileModal({ isOpen, onClose, user }) {
                     onSave={handleSave} 
                     loading={loading}
                   />
+                </div>
+              )}
+
+              {activeTab === "penggunaan" && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
+                  <div>
+                    <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-1">Penggunaan</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Paket, kuota harian, dan pemakaian model AI Anda.</p>
+                  </div>
+                  <UsagePanel />
                 </div>
               )}
 

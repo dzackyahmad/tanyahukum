@@ -86,6 +86,14 @@ export async function PATCH(request, { params }) {
       }
     }
 
+    // Tier diubah admin → masa berlaku 30 hari dihapus (PRO dari admin tanpa tanggal berakhir).
+    // Form admin bisa mengirim tier yang sama saat mengedit nama; itu tidak mengubah masa berlaku.
+    let proExpiresAt;
+    if (body.tier) {
+      const current = await prisma.user.findUnique({ where: { id }, select: { tier: true } });
+      if (current && current.tier !== body.tier) proExpiresAt = null;
+    }
+
     // Update data di database
     const updatedUser = await prisma.user.update({
       where: { id: id },
@@ -94,6 +102,7 @@ export async function PATCH(request, { params }) {
       data: {
         role: body.role,
         tier: body.tier,
+        proExpiresAt,
         promptLimit: body.promptLimit ?? undefined,
         email,
         name: body.name, // PERBAIKAN: Tambahkan ini agar nama bisa diedit!

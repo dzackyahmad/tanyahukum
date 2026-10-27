@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import crypto from "crypto";
+import { proExpiryAfterPayment } from "@/lib/subscription";
 
 // Health check untuk mengetes apakah webhook bisa dijangkau (lewat ngrok/domain)
 // Catatan keamanan: jangan pernah menampilkan potongan server key di sini.
@@ -107,6 +108,11 @@ export async function POST(req) {
     }
 
     if (finalStatus === "SUCCESS") {
+      // PRO berlaku 30 hari; bila masih aktif, ditambahkan dari tanggal berakhir saat ini
+      const buyer = await prisma.user.findUnique({
+        where: { id: transaction.userId },
+        select: { tier: true, proExpiresAt: true },
+      });
       await prisma.$transaction([
         prisma.transaction.update({
           where: { orderId: order_id },
@@ -117,6 +123,7 @@ export async function POST(req) {
           data: {
             tier: "PRO",
             promptLimit: 0,
+            proExpiresAt: proExpiryAfterPayment(buyer),
           },
         }),
       ]);

@@ -296,6 +296,23 @@ describe('SECURITY: Validasi admin users', () => {
     const demote = await PATCH(makeMockRequest({ method: 'PATCH', jsonBody: { role: 'USER' } }), { params: Promise.resolve({ id: ADMIN.userId }) });
     expect(demote.status).toBe(400);
   });
+
+  test('S-USR-03: admin mengubah tier → masa berlaku PRO dihapus; menyimpan tier yang sama tidak mengubahnya', async () => {
+    const target = { params: Promise.resolve({ id: '22222222-2222-2222-2222-222222222222' }) };
+    const admin = { id: ADMIN.userId, role: 'ADMIN' };
+
+    const changed = adminPrisma();
+    changed.user.findUnique.mockResolvedValueOnce(admin).mockResolvedValueOnce({ tier: 'FREE' });
+    let { PATCH } = await loadRouteWithMocks('@/app/api/admin/users/[id]/route.js', { prismaMock: changed, authSession: ADMIN });
+    await PATCH(makeMockRequest({ method: 'PATCH', jsonBody: { tier: 'PRO' } }), target);
+    expect(changed.user.update.mock.calls[0][0].data).toMatchObject({ tier: 'PRO', proExpiresAt: null });
+
+    const same = adminPrisma();
+    same.user.findUnique.mockResolvedValueOnce(admin).mockResolvedValueOnce({ tier: 'PRO' });
+    ({ PATCH } = await loadRouteWithMocks('@/app/api/admin/users/[id]/route.js', { prismaMock: same, authSession: ADMIN }));
+    await PATCH(makeMockRequest({ method: 'PATCH', jsonBody: { tier: 'PRO', name: 'Nama Baru' } }), { params: Promise.resolve({ id: '22222222-2222-2222-2222-222222222222' }) });
+    expect(same.user.update.mock.calls[0][0].data.proExpiresAt).toBeUndefined(); // 30 hari pembeli tetap
+  });
 });
 
 describe('PRIVACY: Detail regulasi publik', () => {

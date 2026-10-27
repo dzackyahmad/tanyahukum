@@ -64,6 +64,16 @@ export default function AppShell({
     return () => window.removeEventListener("open-auth", handleOpenAuth);
   }, []);
 
+  // Tombol Upgrade/Perpanjang di Profil › Penggunaan
+  useEffect(() => {
+    const handleOpenSubscription = () => {
+      setShowProfile(false);
+      setShowSubscription(true);
+    };
+    window.addEventListener("open-subscription", handleOpenSubscription);
+    return () => window.removeEventListener("open-subscription", handleOpenSubscription);
+  }, []);
+
   const handleUpdateLocalUser = (newData) => {
     const updatedUser = { ...user, ...newData };
     setUser(updatedUser);
