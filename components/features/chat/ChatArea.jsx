@@ -6,7 +6,7 @@ import LegalResponse from "./LegalResponse";
 import AIDisclaimer from "./AIDisclaimer";
 import ProcessPanel from "./ProcessPanel";
 import FallbackNotice from "./FallbackNotice";
-import { ModelLimitNotice, QuotaWarning } from "./LimitNotice";
+import { ModelLimitNotice, ModelSwitchNotice, QuotaWarning } from "./LimitNotice";
 import ChatInput from "./ChatInput";
 import ModeToggle, { DEFAULT_MODE, MODE_IDS } from "./ModeToggle";
 
@@ -111,6 +111,10 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
   const [quota, setQuota] = useState(null);
   const [quotaDismissed, setQuotaDismissed] = useState(false);
   const warnedModelsRef = useRef(new Set());
+  // Model terpilih habis → menu model memindahkan pilihan otomatis & memberi tahu di sini.
+  // statusRefresh naik setelah ada fallback agar status menu model diambil ulang.
+  const [modelSwitch, setModelSwitch] = useState(null);
+  const [statusRefresh, setStatusRefresh] = useState(0);
   const openUpgrade = () => (onOpenSubscription ? onOpenSubscription() : window.dispatchEvent(new Event("open-subscription")));
 
   // ==============================
@@ -229,6 +233,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
     abortRef.current = controller;
 
     try {
+      let hadFallback = false;
       const data = await sendMessageStream({
         signal: controller.signal,
         message: text,
@@ -252,6 +257,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
           } else if (event.type === "model") {
             updateStreamMsg((m) => ({ ...m, process: { ...m.process, model: event.model, provider: event.provider, contextChunks: event.contextChunks, mode: event.mode || m.process.mode, fallback: !!event.fallback } }));
           } else if (event.type === "fallback") {
+            hadFallback = true;
             // Model berganti otomatis; pengguna tidak perlu mengirim ulang pertanyaan
             updateStreamMsg((m) => ({ ...m, process: { ...m.process, fallbacks: [...(m.process.fallbacks || []), { from: event.fromLabel, to: event.toLabel, reason: event.reason, restarted: !!event.restarted }] } }));
           } else if (event.type === "reset") {
@@ -271,6 +277,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
         window.dispatchEvent(new Event("refresh-chats"));
       }
 
+      if (hadFallback) setStatusRefresh((k) => k + 1);
       if (data.quota) {
         setQuota(data.quota);
         setQuotaDismissed(false);
@@ -374,6 +381,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
             {quota?.warning && !quotaDismissed && (
               <QuotaWarning quota={quota} onUpgrade={openUpgrade} onClose={() => setQuotaDismissed(true)} className="max-w-2xl" />
             )}
+            {modelSwitch && <ModelSwitchNotice change={modelSwitch} onClose={() => setModelSwitch(null)} className="max-w-2xl" />}
 
             {/* INPUT TENGAH */}
             <div data-tour="chat-input" className="w-full max-w-2xl flex flex-col border-2 border-blue-100 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm animate-fade-down delay-150 focus-ring premium-glow transition-colors">
@@ -391,7 +399,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
               <div className="flex items-center gap-1 px-2 pb-2">
                 {/* spacer, bukan justify-end: di kotak yang sangat sempit tombol meluap ke kanan, tidak tertutup sidebar */}
                 <div className="flex-1" />
-                <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} />
+                <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} refreshKey={statusRefresh} onAutoSwitch={setModelSwitch} />
 
                 <button
                   id="send-btn-center"
@@ -541,6 +549,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
               {quota?.warning && !quotaDismissed && (
                 <QuotaWarning quota={quota} onUpgrade={openUpgrade} onClose={() => setQuotaDismissed(true)} />
               )}
+              {modelSwitch && <ModelSwitchNotice change={modelSwitch} onClose={() => setModelSwitch(null)} />}
               <div data-tour="chat-input" className="max-w-5xl mx-auto w-full flex flex-col border border-blue-200 dark:border-slate-700 rounded-[1.5rem] overflow-hidden bg-white dark:bg-slate-800 shadow-xl shadow-blue-500/5 focus-ring transition-all">
 
                 {/* Teks memakai seluruh lebar kotak; pilihan model & tombol kirim di baris bawah */}
@@ -556,7 +565,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
                 <div className="flex items-center gap-1 px-2 pb-2">
                   {/* spacer, bukan justify-end: di kotak yang sangat sempit tombol meluap ke kanan, tidak tertutup sidebar */}
                   <div className="flex-1" />
-                  <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} openUpward />
+                  <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} openUpward refreshKey={statusRefresh} onAutoSwitch={setModelSwitch} />
 
                   <button
                     id="send-btn"

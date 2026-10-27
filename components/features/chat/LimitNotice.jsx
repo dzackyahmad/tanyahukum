@@ -37,6 +37,26 @@ export function ModelLimitNotice({ warning }) {
   );
 }
 
+// Pilihan model dipindah otomatis karena model yang dipilih sedang habis (di atas kotak pertanyaan)
+export function ModelSwitchNotice({ change, onClose, className = "max-w-5xl mx-auto" }) {
+  return (
+    <div
+      role="status"
+      className={`${className} w-full mb-2 flex items-start gap-2 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-[13px] text-left text-amber-800 dark:text-amber-300`}
+    >
+      <WarnIcon />
+      <span className="flex-1">
+        <strong>{change.from}</strong> tidak bisa dipakai ({change.reason ? change.reason.charAt(0).toLowerCase() + change.reason.slice(1) : "sedang habis"}), jadi pilihan dipindah otomatis ke <strong>{change.to}</strong>.
+      </span>
+      <button type="button" onClick={onClose} aria-label="Tutup pemberitahuan model" className="shrink-0 rounded p-0.5 hover:bg-amber-100 dark:hover:bg-amber-800/40">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 export function QuotaWarning({ quota, onUpgrade, onClose, className = "max-w-5xl mx-auto" }) {
   const empty = quota.remaining <= 0;
   return (

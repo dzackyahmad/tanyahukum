@@ -38,7 +38,7 @@ Tanggal: 27 Oktober 2026 · Status: selesai diuji di lokal, **belum di-deploy**
 
 - **Gagal di tengah jawaban:** server mengirim event `reset` (teks yang sudah tampil dihapus) lalu `fallback`, dan jawaban diulang dari awal dengan model berikutnya. Riwayat & kuota tetap tercatat sekali.
 - **Cooldown:** model yang baru kena limit dipindah ke urutan terakhir (bukan dibuang), sehingga pertanyaan berikutnya langsung ke cadangan tanpa menunggu gagal. Cooldown disimpan di tabel `ModelStatus` dan dibaca **semua instance server** sebelum memilih model (`syncCooldowns`, bersamaan dengan pencarian dokumen, batas 1,5 dtk).
-- **Tanda di menu pilih model** (`ModeToggle.jsx`, data dari `/api/usage`): model habis redup + "Kuota harian habis · tersedia lagi hh.mm" (tetap bisa dipilih, otomatis memakai cadangan); model ≥ 70% "Hampir habis · x% kuota harian terpakai".
+- **Tanda di menu pilih model** (`ModeToggle.jsx`, data dari `/api/usage`): model habis redup + "Kuota harian habis · tersedia lagi hh.mm" dan **tidak bisa dipilih**; bila model yang sedang terpilih habis, pilihan dipindah otomatis ke model terbaik yang tersedia (urutan Ragas, `fallbackOrder` dari `/api/usage`) dengan pemberitahuan di atas kotak pertanyaan; model ≥ 70% "Hampir habis · x% kuota harian terpakai".
 - **Peringatan ≥ 70%** (`LimitNotice.jsx`): event `done` membawa `quota` (kuota pertanyaan pengguna, dari database) dan `modelWarning` (kuota harian model seluruh aplikasi: Groq aktual dari header per hari; Gemini estimasi bila `GEMINI_DAILY_LIMITS` diisi). Kuota pengguna tampil di atas kotak pertanyaan; peringatan model di atas jawaban, sekali per model.
 - **Pemberitahuan:** kotak kuning di atas jawaban (`components/features/chat/FallbackNotice.jsx`), contoh: *"Gemini 3.5 Flash-Lite · Kilat server penyedia sedang sibuk atau terganggu. Jawaban diulang otomatis dengan Gemini 3.6 Flash · Kilat, tanpa perlu mengirim ulang pertanyaan."*
 - **Semua model gagal:** pesan *"Kuota semua model AI sedang habis atau mencapai batas penggunaan…"*; tidak ada yang disimpan dan kuota tidak terpakai.
@@ -136,7 +136,7 @@ Diterapkan dengan `prisma db execute` (database tidak memakai riwayat `prisma mi
 | Jenis | Jumlah | Hasil |
 |---|---|---|
 | Unit & integrasi (Jest) | **369** (sebelumnya 232; +137) | 369 lulus |
-| E2E browser (Playwright) | 8 | 8 lulus |
+| E2E browser (Playwright) | 9 | 9 lulus (termasuk model habis terkunci & pindah otomatis) |
 
 Test baru:
 

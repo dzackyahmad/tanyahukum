@@ -90,7 +90,14 @@ const availabilityLimits = availability.map((a) => {
   if (a.model === 'gemini-3.5-flash') return { ...a, status: 'tersedia', cooldownUntil: null, cooldownReason: null, daily: { used: 15, limit: 20, source: 'estimasi', percent: 75, warning: true } };
   return { ...a, status: 'tersedia', cooldownUntil: null, cooldownReason: null, daily: null };
 });
-const usageLimits = { ...usageBasic, quota: { used: 8, limit: 10, remaining: 2, resetsAt: iso(now + 5.3 * 3600e3) }, availability: availabilityLimits };
+const FALLBACK_ORDER = ['next-fast', 'next', 'fast', 'qwen', 'lite', 'lite-think', 'deep', 'gptoss', 'gptoss-fast', 'qwen-think'];
+const usageLimits = { ...usageBasic, quota: { used: 8, limit: 10, remaining: 2, resetsAt: iso(now + 5.3 * 3600e3) }, availability: availabilityLimits, fallbackOrder: FALLBACK_ORDER };
+// Model bawaan (Flash-Lite) ikut habis → pilihan dipindah otomatis
+const usageSwitch = {
+  ...usageLimits,
+  availability: availabilityLimits.map((a) => (a.model === 'gemini-3.5-flash-lite'
+    ? { ...a, status: 'dibatasi', cooldownReason: 'limit_daily', cooldownUntil: iso(now + 5 * 3600e3), daily: null } : a)),
+};
 
 const usagePro = {
   ...usageBasic,
@@ -302,6 +309,17 @@ try {
   }
 
   // 17–18. Penggunaan: peringatan kuota pengguna & status model (habis / hampir habis)
+  // 19. Model terpilih habis → pilihan dipindah otomatis + pemberitahuan (menu terkunci: lihat H15)
+  if (want('H19')) {
+    const { page, ctx } = await newPage({ usage: usageSwitch });
+    await page.goto(`${BASE}/chatbot`);
+    await page.getByText('jadi pilihan dipindah otomatis ke').waitFor({ timeout: 15000 });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${OUT}/H19_pilihan_model_dipindah_otomatis.png` });
+    await ctx.close();
+    console.log('ok H19_pilihan_model_dipindah_otomatis');
+  }
+
   if (want('H17')) await usageShot('H17_penggunaan_peringatan_kuota', usageLimits);
   if (want('H18')) await usageShot('H18_penggunaan_status_model_limit', usageLimits, { scroll: 900 });
 } finally {

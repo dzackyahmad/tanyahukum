@@ -135,6 +135,7 @@ describe('GET /api/usage', () => {
       expect(byModel['openai/gpt-oss-120b'].daily).toMatchObject({ percent: 75, warning: true, source: 'aktual' });
       expect(byModel['gemini-3.6-flash'].daily).toMatchObject({ used: 15, limit: 20, percent: 75, source: 'estimasi' });
       expect(byModel['gemini-3.5-flash-lite'].daily).toBeNull();
+      expect(body.fallbackOrder[0]).toBe('next-fast'); // urutan Ragas untuk pindah otomatis di menu model
     } finally {
       delete process.env.GEMINI_DAILY_LIMITS;
     }
