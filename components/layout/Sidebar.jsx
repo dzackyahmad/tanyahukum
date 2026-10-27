@@ -150,8 +150,8 @@ export default function Sidebar({ isOpen, setIsOpen, onOpenProfile }) {
         flex flex-col justify-between transition-all duration-300 border border-transparent dark:border-slate-800
         ${isOpen ? "w-64" : "w-20 items-center"}`}
       >
-        {/* TOP */}
-        <div className="w-full flex flex-col h-full">
+        {/* TOP: mengisi sisa ruang, profil tetap menempel di bawah sidebar */}
+        <div className="w-full flex flex-col flex-1 min-h-0">
 
           {/* HEADER */}
           {isOpen ? (
@@ -214,7 +214,7 @@ export default function Sidebar({ isOpen, setIsOpen, onOpenProfile }) {
                 Riwayat Obrolan
               </p>
 
-              <div className="space-y-1.5 flex-1 overflow-y-auto overflow-x-visible pr-1">
+              <div className="sidebar-scroll space-y-1.5 flex-1 min-h-0 overflow-y-auto overflow-x-visible pr-1">
                 {!user ? (
                   <div className="p-4 bg-blue-50/50 dark:bg-slate-800/50 rounded-xl border border-blue-100 dark:border-slate-700 border-dashed animate-in fade-in duration-500">
                     <p className="text-[10px] text-gray-500 dark:text-gray-400 text-center leading-relaxed">
@@ -250,7 +250,7 @@ export default function Sidebar({ isOpen, setIsOpen, onOpenProfile }) {
           <div
             data-tour="profile"
             onClick={onOpenProfile}
-            className={`flex items-center ${
+            className={`shrink-0 mt-3 flex items-center ${
               isOpen ? "gap-3 px-2" : "justify-center"
             } cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-800 rounded-xl p-2 transition`}
           >

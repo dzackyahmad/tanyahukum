@@ -66,7 +66,7 @@ export default function SubscriptionSelect({
                   </p>
                   {isPro && (
                     <p className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider transition-colors">
-                      /bulan
+                      /30 hari
                     </p>
                   )}
                 </div>

@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { requireAdmin, SAFE_USER_SELECT, EMAIL_REGEX, validateUserAdminFields } from '@/lib/security';
+import { FREE_PROMPT_LIMIT } from '@/lib/subscription';
 
 export async function GET() {
   try {
@@ -97,7 +98,7 @@ export async function POST(request) {
         passwordHash: hashedPassword, 
         role: role || 'USER',
         tier: tier || 'FREE',
-        promptLimit: promptLimit || 50, 
+        promptLimit: promptLimit || FREE_PROMPT_LIMIT,
       },
     });
 

@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import { verifyToken } from "../../../src/lib/auth-server";
 import { EMAIL_REGEX, isSafeHttpUrl } from "@/lib/security";
+import { downgradeIfExpired, proExpiryAfterPayment, FREE_PROMPT_LIMIT } from "@/lib/subscription";
 // ==========================
 // GET PROFILE
 // ==========================
@@ -29,6 +30,7 @@ export async function GET(request) {
         tier: true,
         promptLimit: true,
         personalContext: true,
+        proExpiresAt: true,
       },
     });
 
@@ -39,11 +41,18 @@ export async function GET(request) {
       );
     }
 
+    // PRO 30 hari yang sudah lewat → kembali ke FREE (batas harian default)
+    if (await downgradeIfExpired(prisma, user)) {
+      user.tier = "FREE";
+      user.promptLimit = FREE_PROMPT_LIMIT;
+    }
+
     // ==========================================
     // SELF-HEALING: Cek jika ada transaksi PENDING yang sudah sukses di Midtrans
     // Ini menangani kasus jika Webhook (ngrok) gagal/telat.
+    // Termasuk perpanjangan oleh PRO 30 hari yang masih aktif.
     // ==========================================
-    if (user.tier === "FREE") {
+    if (user.tier === "FREE" || user.proExpiresAt) {
       const pendingTx = await prisma.transaction.findFirst({
         where: { 
           userId: user.id,
@@ -69,6 +78,7 @@ export async function GET(request) {
           if (status.transaction_status === "settlement" || status.transaction_status === "capture") {
              console.log(`[SYNC-STATUS] Transaction ${pendingTx.orderId} is SUCCESS in Midtrans. Upgrading user...`);
              
+             const proExpiresAt = proExpiryAfterPayment(user);
              await prisma.$transaction([
                prisma.transaction.update({
                  where: { orderId: pendingTx.orderId },
@@ -76,13 +86,14 @@ export async function GET(request) {
                }),
                prisma.user.update({
                  where: { id: user.id },
-                 data: { tier: "PRO", promptLimit: 0 }
+                 data: { tier: "PRO", promptLimit: 0, proExpiresAt }
                })
              ]);
-             
+
              // Kembalikan data yang sudah di-update
              user.tier = "PRO";
              user.promptLimit = 0;
+             user.proExpiresAt = proExpiresAt;
           }
         } catch (syncError) {
           console.error("[SYNC-STATUS] Error syncing status:", syncError.message);

@@ -148,6 +148,19 @@ describe('POST /api/payment/checkout', () => {
     expect(prismaMock.transaction.create).not.toHaveBeenCalled();
   });
 
+  test('TC-PAY-12: PRO 30 hari yang masih aktif boleh memperpanjang', async () => {
+    const prismaMock = {
+      user: { findUnique: jest.fn().mockResolvedValue({ email: 'pro30@test.com', tier: 'PRO', proExpiresAt: new Date(Date.now() + 3 * 86_400_000) }) },
+      transaction: { create: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) },
+    };
+    const { POST } = await loadRouteWithMocks(baseRoute, { prismaMock, authSession: { userId: 'u-pro-30' } });
+    const res = await POST(makeMockRequest({ method: 'POST', jsonBody: {} }));
+    expect(res.status).toBe(200);
+    expect(prismaMock.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ userId: 'u-pro-30', amount: 49900, status: 'PENDING' }),
+    }));
+  });
+
   // ── IDOR PROTECTION ─────────────────────────────────────────────────────
   test('TC-PAY-08: [SECURITY] userId di body yang beda dengan sesi ditolak 403', async () => {
     const prismaMock = {

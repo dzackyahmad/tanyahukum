@@ -12,6 +12,8 @@ describe('POST /api/payment/webhook', () => {
         update: jest.fn().mockResolvedValue({}),
       },
       user: {
+        // Webhook membaca tanggal berakhir PRO saat ini (perpanjangan 30 hari)
+        findUnique: jest.fn().mockResolvedValue({ tier: 'FREE', proExpiresAt: null }),
         update: jest.fn().mockResolvedValue({}),
       },
       $transaction: jest.fn().mockResolvedValue([]),

@@ -206,3 +206,87 @@ tests/PPL-II/ragas/.venv/Scripts/python tests/PPL-II/ragas/summarize.py
    - menaikkan batas konteks Groq bila kuota memungkinkan;
    - memperbaiki judul dokumen di Pinecone yang masih berupa nama file (mis. "2023pd3332009");
    - menambah pertanyaan uji dari domain lain.
+
+## 9. Evaluasi Lanjutan (27 Oktober 2026): 5 Mode Tambahan
+
+### 9.1 Yang diuji
+
+Lima kombinasi model–mode yang belum dievaluasi di atas, sehingga kelima model kini diuji di **kedua mode** (10 kombinasi):
+
+| Model | Mode baru | Soal dinilai | Catatan |
+|---|---|---|---|
+| Gemini 3.5 Flash-Lite | Berpikir | 10 | |
+| Gemini 3.6 Flash | Berpikir | 10 | perdata_105 sempat jatuh ke model cadangan (kuota harian habis), dilengkapi di putaran kedua |
+| Gemini 3.5 Flash | Kilat | 10 | perdata_104 & perdata_105 sempat jatuh ke model cadangan, dilengkapi di putaran kedua |
+| GPT-OSS 120B | Kilat | 10 | |
+| Qwen 3.8 | Berpikir | 10 | naker_105 berhasil pada percobaan ulang |
+
+Dataset, konteks, juri (Gemini 3.5 Flash-Lite, temperature 0), embedding, dan prompt aplikasi **sama persis** dengan evaluasi di atas, sehingga skornya sebanding. Jawaban diambil dengan kode chat sebelum perubahan prompt v8 (guardrail & keamanan AI). Total 350 penilaian baru, 0 gagal.
+
+Pelaksanaan dalam dua putaran:
+
+1. **Putaran pertama:** 47 jawaban, 329 penilaian. Kuota harian juri di `GOOGLE_API_KEY_EVAL` habis pada penilaian ke-295; sisanya dilanjutkan dengan `GOOGLE_API_KEY` (model dan parameter juri sama). Tiga jawaban jatuh ke model cadangan karena kuota harian Gemini 3.6 Flash / 3.5 Flash habis, sehingga tidak dinilai.
+2. **Putaran kedua (melengkapi):** tiga jawaban yang kurang (perdata_105 · 3.6 Flash Berpikir; perdata_104 & perdata_105 · 3.5 Flash Kilat) diambil ulang dengan API key Gemini dari project baru, lalu dinilai 21 penilaian dengan key yang sama. Selama pengambilan, route chat dikembalikan sementara ke versi sebelum v8 agar prompt sama dengan 47 jawaban lainnya; route v8 dipulihkan segera sesudahnya (diverifikasi identik). Ketiga jawaban benar-benar dari model yang dimaksud (log: `gemini-3.6-flash`, `gemini-3.5-flash`), bukan cadangan.
+
+### 9.2 Skor 10 kombinasi (rata-rata per mode)
+
+| Model · Mode | n | Faithfulness | Answer Relevancy | Answer Correctness | Factual Correctness | Rata-rata 4 metrik | Waktu rata-rata |
+|---|---|---|---|---|---|---|---|
+| Gemini 3.6 Flash · Kilat | 10 | 1,000 | 0,931 | 0,829 | 0,771 | **0,883** | 17,3 dtk |
+| Gemini 3.5 Flash · Kilat *(baru)* | 10 | 1,000 | 0,928 | 0,822 | 0,776 | **0,881** | 11,9 dtk |
+| Gemini 3.5 Flash · Berpikir | 10 | 1,000 | 0,924 | 0,804 | 0,796 | **0,881** | 12,1 dtk |
+| Gemini 3.5 Flash-Lite · Berpikir *(baru)* | 10 | 1,000 | 0,906 | 0,811 | 0,771 | **0,872** | 9,5 dtk |
+| Gemini 3.5 Flash-Lite · Kilat | 10 | 0,986 | 0,914 | 0,787 | 0,789 | **0,869** | 7,2 dtk |
+| Qwen 3.8 · Kilat | 10 | 0,986 | 0,955 | 0,796 | 0,735 | **0,868** | 5,0 dtk |
+| Gemini 3.6 Flash · Berpikir *(baru)* | 10 | 1,000 | 0,931 | 0,792 | 0,723 | **0,862** | 16,7 dtk |
+| GPT-OSS 120B · Berpikir | 10 | 0,956 | 0,930 | 0,762 | 0,646 | **0,823** | 5,8 dtk |
+| Qwen 3.8 · Berpikir *(baru)* | 10 | 0,978 | 0,945 | 0,673 | 0,655 | **0,813** | 5,8 dtk |
+| GPT-OSS 120B · Kilat *(baru)* | 10 | 0,948 | 0,913 | 0,730 | 0,646 | **0,809** | 5,5 dtk |
+| *Target* | | *≥ 0,70* | *≥ 0,55* | *≥ 0,52* | *≥ 0,50* | | |
+
+Semua 10 kombinasi melewati target di semua metrik. Skor lengkap (ROUGE-L, BLEU, String Similarity, per domain, per tingkat kesulitan, per pertanyaan) ada di `ragas/results/summary_v3.md`.
+
+Answer Correctness per domain untuk mode baru:
+
+| Model · Mode | Ketenagakerjaan | Perdata |
+|---|---|---|
+| Gemini 3.5 Flash-Lite · Berpikir | 0,837 | 0,785 |
+| Gemini 3.6 Flash · Berpikir | 0,793 | 0,792 |
+| Gemini 3.5 Flash · Kilat | 0,863 | 0,780 |
+| GPT-OSS 120B · Kilat | 0,767 | 0,693 |
+| Qwen 3.8 · Berpikir | 0,702 | 0,645 |
+
+### 9.3 Temuan
+
+1. **Mode Berpikir tidak otomatis lebih baik.** Gemini 3.6 Flash Berpikir (0,862) dan Qwen 3.8 Berpikir (0,813) justru lebih rendah dari mode Kilat-nya (0,883 dan 0,868). Penurunan terbesar ada di Factual Correctness: jawaban mode Berpikir cenderung menambahkan kesimpulan di luar jawaban acuan.
+2. **Flash-Lite Berpikir sedikit lebih baik dari Kilat** (0,872 vs 0,869), dengan waktu +2,3 dtk. Selisihnya masih dalam batas wajar acak untuk 10 soal.
+3. **Gemini 3.5 Flash Kilat setara dengan mode Berpikir-nya** (0,881 vs 0,881) dan sedikit lebih cepat (11,9 vs 12,1 dtk).
+4. **GPT-OSS 120B tetap terendah** di kedua mode, terutama Factual Correctness (0,646).
+5. Faithfulness semua mode ≥ 0,948: tidak ada mode yang cenderung mengarang di luar dokumen.
+
+### 9.4 Urutan prioritas fallback
+
+Hasil ini dipakai untuk urutan model cadangan otomatis (`lib/modelRouter.js` → `DEFAULT_MODE_PRIORITY`). Aturan: rata-rata 4 metrik dibulatkan 2 desimal (selisih < 0,01 pada 10 soal dianggap setara), lalu yang lebih cepat didahulukan.
+
+| Urutan | Mode | Skor (dibulatkan) | Waktu |
+|---|---|---|---|
+| 1 | Gemini 3.5 Flash · Kilat | 0,88 | 11,9 dtk |
+| 2 | Gemini 3.5 Flash · Berpikir | 0,88 | 12,1 dtk |
+| 3 | Gemini 3.6 Flash · Kilat | 0,88 | 17,3 dtk |
+| 4 | Qwen 3.8 · Kilat | 0,87 | 5,0 dtk |
+| 5 | Gemini 3.5 Flash-Lite · Kilat | 0,87 | 7,2 dtk |
+| 6 | Gemini 3.5 Flash-Lite · Berpikir | 0,87 | 9,5 dtk |
+| 7 | Gemini 3.6 Flash · Berpikir | 0,86 | 16,7 dtk |
+| 8 | GPT-OSS 120B · Berpikir | 0,82 | 5,8 dtk |
+| 9 | GPT-OSS 120B · Kilat | 0,81 | 5,5 dtk |
+| 10 | Qwen 3.8 · Berpikir | 0,81 | 5,8 dtk |
+
+Cara pakainya: model pilihan pengguna selalu dicoba pertama. Cadangan diambil dari urutan di atas, dengan jenis mode yang sama (Kilat/Berpikir) didahulukan; satu model hanya dicoba sekali karena batas kuota berlaku per model. Contoh untuk default Flash-Lite · Kilat: Flash-Lite → 3.5 Flash Kilat → 3.6 Flash Kilat → Qwen Kilat → GPT-OSS Kilat. Urutan bisa diubah tanpa mengubah kode lewat env `MODEL_PRIORITY` (daftar id mode dipisah koma).
+
+Setelah putaran kedua (semua mode n=10), aturan yang sama menghasilkan **urutan yang sama persis** dengan hasil putaran pertama, sehingga `DEFAULT_MODE_PRIORITY` tidak diubah.
+
+### 9.5 Keterbatasan tambahan
+
+- Tiga jawaban putaran kedua diambil dengan API key dari project Google yang berbeda. Model, parameter, prompt, dan konteksnya sama, sehingga hasilnya tetap sebanding; perbedaannya hanya kuota.
+- Gemini 3.6 Flash dan 3.5 Flash punya kuota harian gratis yang kecil (habis selama evaluasi). Di urutan fallback keduanya ada di atas karena skornya; bila kuotanya habis, cooldown otomatis melewatinya ke model berikutnya.
+- Jawaban dinilai dengan prompt sebelum v8. Prompt v8 menambah aturan keamanan & guardrail yang sama untuk semua model, sehingga urutan relatif diperkirakan tidak berubah, tetapi skor absolut belum diukur ulang.

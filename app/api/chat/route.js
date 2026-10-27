@@ -6,7 +6,20 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { getSession } from "@/lib/auth";
 import { rateLimit } from "@/lib/rateLimit";
 import { LRUCache } from "lru-cache";
-import { sanitizePreferences, buildPreferenceInstructions } from "@/lib/chatPreferences";
+import { sanitizePreferences } from "@/lib/chatPreferences";
+import {
+  MODE_CONFIG, CHAT_MODES, DEFAULT_MODE, buildModelChain, classifyModelError, markCooldown, cooldownOf,
+  withStreamTimeouts, STREAM_TIMEOUTS, FALLBACK_REASON_TEXT, recordRateLimitHeaders, rateLimitSnapshot,
+  modelName, dailyUsageLevel, geminiDailyLimits,
+} from "@/lib/modelRouter";
+import {
+  detectPromptAttack, createRequestSecrets, createOutputGuard, scanOutput, secretEnvValues,
+  BLOCKED_REQUEST_MESSAGE, BLOCKED_OUTPUT_MESSAGE,
+} from "@/lib/aiSecurity";
+import { classifyQuestion, assessEvidence, consultationNote, findUnverifiedCitations, unverifiedCitationNote } from "@/lib/legalGuardrails";
+import { buildSystemPrompt, buildUserContent, PROMPT_FINGERPRINTS } from "@/lib/chatPrompt";
+import { dailyLimitFor, downgradeIfExpired, effectivePlan, startOfQuotaDay, quotaStatus } from "@/lib/subscription";
+import { saveModelStatus, rateLimitData, syncCooldowns, geminiAnswersToday } from "@/lib/modelStatus";
 
 const MAX_MESSAGE_LENGTH = 5000;
 
@@ -17,62 +30,8 @@ import prisma from "@/lib/prisma";
 // HELPER RAG (dipakai bersama oleh mode JSON & mode streaming)
 // ==========================================================
 
-const QUOTA_ERROR_MESSAGE = "Kuota AI hari ini telah habis. Silakan coba lagi nanti.";
+const QUOTA_ERROR_MESSAGE = "Kuota semua model AI sedang habis atau mencapai batas penggunaan. Silakan coba lagi beberapa menit lagi.";
 const GENERIC_ERROR_MESSAGE = "Terjadi kesalahan pada server saat memproses pertanyaan hukum.";
-
-// Model utama + cadangan. Kuota gratis Gemini dihitung per model, jadi jika kuota
-// model utama habis, jawaban otomatis dibuat dengan model cadangan (bisa diatur via env).
-// Gemini 2.5 Flash sudah ditutup Google untuk project baru → diganti Gemini 3.6 Flash (16 Okt 2026).
-const PRIMARY_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
-const FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS ?? "gemini-3.5-flash-lite")
-  .split(",")
-  .map((m) => m.trim())
-  .filter(Boolean);
-const MODEL_CHAIN = [PRIMARY_MODEL, ...FALLBACK_MODELS.filter((m) => m !== PRIMARY_MODEL)];
-
-// Pilihan model/mode jawaban untuk pengguna (semua memakai API tier gratis).
-// - provider "gemini": Google Gemini API (GOOGLE_API_KEY)
-// - provider "groq"  : Groq API (GROQ_API_KEY) — sangat cepat, tapi batas gratis ±7–8 rb token/menit,
-//                      sehingga konteks dibatasi ke `maxChunks` potongan teratas.
-// Setiap model punya 2 mode: "Kilat" (langsung menjawab) dan "Berpikir" (berpikir dulu,
-// ringkasannya ditampilkan di panel Proses). id mode harus sama dengan ModeToggle.jsx.
-// reasoningEffort = tingkat penalaran model Groq (GPT-OSS selalu bernalar; Qwen bisa dimatikan).
-const MODE_CONFIG = {
-  fast:          { provider: "gemini", model: PRIMARY_MODEL, thinking: false },             // Gemini 3.6 Flash · Kilat
-  deep:          { provider: "gemini", model: PRIMARY_MODEL, thinking: true },              // Gemini 3.6 Flash · Berpikir
-  lite:          { provider: "gemini", model: "gemini-3.5-flash-lite", thinking: false },   // Gemini 3.5 Flash-Lite · Kilat (default UI)
-  "lite-think":  { provider: "gemini", model: "gemini-3.5-flash-lite", thinking: true },    // Gemini 3.5 Flash-Lite · Berpikir
-  "next-fast":   { provider: "gemini", model: "gemini-3.5-flash", thinking: false },        // Gemini 3.5 Flash · Kilat
-  next:          { provider: "gemini", model: "gemini-3.5-flash", thinking: true },         // Gemini 3.5 Flash · Berpikir
-  "gptoss-fast": { provider: "groq", model: "openai/gpt-oss-120b", thinking: false, reasoningEffort: "low", maxChunks: 20 },
-  gptoss:        { provider: "groq", model: "openai/gpt-oss-120b", thinking: true, reasoningEffort: "medium", maxChunks: 20 },
-  qwen:          { provider: "groq", model: "qwen/qwen3.8-27b", thinking: false, reasoningEffort: "none", maxChunks: 20 },
-  "qwen-think":  { provider: "groq", model: "qwen/qwen3.8-27b", thinking: true, reasoningEffort: "medium", maxChunks: 20 },
-};
-const CHAT_MODES = Object.keys(MODE_CONFIG);
-
-// Urutan percobaan untuk satu mode: model pilihan dulu, lalu model Gemini cadangan
-// (dipakai jika kuota/batas model pilihan habis, atau key Groq tidak tersedia).
-function modelChainFor(mode) {
-  const cfg = MODE_CONFIG[mode] || MODE_CONFIG.deep;
-  const selected = { provider: cfg.provider, model: cfg.model, maxChunks: cfg.maxChunks, reasoningEffort: cfg.reasoningEffort };
-  const geminiFallbacks = MODEL_CHAIN
-    .filter((m) => !(cfg.provider === "gemini" && m === cfg.model))
-    .map((model) => ({ provider: "gemini", model }));
-  const chain = [selected, ...geminiFallbacks];
-  return chain.filter((c) => c.provider !== "groq" || process.env.GROQ_API_KEY);
-}
-
-function isQuotaError(err) {
-  return err?.status === 429 || err?.status === 413 || err?.message?.includes("429") || err?.message?.includes("quota");
-}
-
-// Gangguan sementara di sisi penyedia model (server sibuk/overload) → boleh pindah ke model cadangan
-function isTransientError(err) {
-  const msg = err?.message || "";
-  return [500, 502, 503, 504].includes(err?.status) || /\b50[0234]\b|overloaded|unavailable|high demand|failed to parse stream/i.test(msg);
-}
-const canUseFallback = (err) => isQuotaError(err) || isTransientError(err);
 
 // Konfigurasi thinking per model Gemini.
 // - Gemini 2.5: thinking aktif default; dimatikan dengan budget 0.
@@ -89,8 +48,9 @@ function thinkingConfigFor(model, thinking) {
   return { includeThoughts: true, thinkingBudget: 1024 };
 }
 
-// Streaming dari Groq (API kompatibel OpenAI). Menghasilkan bagian { type: "thinking" | "text", text }.
-async function* streamGroq({ model, thinking, reasoningEffort, systemPrompt, message, signal }) {
+// Streaming dari Groq (API kompatibel OpenAI).
+// Menghasilkan bagian { type: "thinking" | "text", text } dan { type: "usage", input, output }.
+async function* streamGroq({ model, thinking, reasoningEffort, systemPrompt, userContent, signal }) {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     signal,
@@ -105,13 +65,17 @@ async function* streamGroq({ model, thinking, reasoningEffort, systemPrompt, mes
       ...(model.startsWith("qwen/") ? { reasoning_format: "parsed" } : {}),
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: message },
+        { role: "user", content: userContent },
       ],
     }),
   });
+  // Sisa batas per menit dari header (dipakai halaman Penggunaan sebagai estimasi)
+  recordRateLimitHeaders(model, res.headers);
   if (!res.ok) {
     const err = new Error(`Groq ${res.status}: ${(await res.text()).slice(0, 200)}`);
     err.status = res.status;
+    const retryAfter = Number(res.headers?.get?.("retry-after"));
+    if (Number.isFinite(retryAfter) && retryAfter > 0) err.retryAfterMs = retryAfter * 1000;
     throw err;
   }
 
@@ -126,20 +90,23 @@ async function* streamGroq({ model, thinking, reasoningEffort, systemPrompt, mes
     buffer = lines.pop();
     for (const line of lines) {
       if (!line.startsWith("data: ") || line.includes("[DONE]")) continue;
-      let delta;
+      let payload;
       try {
-        delta = JSON.parse(line.slice(6)).choices?.[0]?.delta || {};
+        payload = JSON.parse(line.slice(6));
       } catch {
         continue;
       }
+      const delta = payload.choices?.[0]?.delta || {};
       // Mode Kilat: penalaran singkat GPT-OSS tidak ditampilkan
       if (delta.reasoning && thinking) yield { type: "thinking", text: delta.reasoning };
       if (delta.content) yield { type: "text", text: delta.content };
+      const usage = payload.usage || payload.x_groq?.usage;
+      if (usage) yield { type: "usage", input: usage.prompt_tokens ?? null, output: usage.completion_tokens ?? null };
     }
   }
 }
 
-function createLlm(model = PRIMARY_MODEL, thinkingConfig) {
+function createLlm(model, thinkingConfig) {
   return new ChatGoogleGenerativeAI({
     apiKey: process.env.GOOGLE_API_KEY,
     model,
@@ -151,13 +118,25 @@ function createLlm(model = PRIMARY_MODEL, thinkingConfig) {
   });
 }
 
-// Streaming dari Gemini (LangChain). Menghasilkan bagian { type: "thinking" | "text", text }.
-async function* streamGemini({ model, thinking, systemPrompt, message, signal }) {
+// Streaming dari Gemini (LangChain).
+// Menghasilkan bagian { type: "thinking" | "text", text } dan { type: "usage", input, output }.
+async function* streamGemini({ model, thinking, systemPrompt, userContent, signal }) {
   const llm = createLlm(model, thinkingConfigFor(model, thinking));
-  const chunks = await llm.stream([new SystemMessage(systemPrompt), new HumanMessage(message)], { signal });
+  const chunks = await llm.stream([new SystemMessage(systemPrompt), new HumanMessage(userContent)], { signal });
+  // LangChain melaporkan token per potongan sebagai SELISIH dari potongan sebelumnya,
+  // jadi totalnya adalah penjumlahan.
+  let usage = null;
   for await (const chunk of chunks) {
     yield* contentParts(chunk.content);
+    const u = chunk.usage_metadata;
+    if (u) {
+      usage = {
+        input: (usage?.input ?? 0) + (u.input_tokens ?? 0),
+        output: (usage?.output ?? 0) + (u.output_tokens ?? 0),
+      };
+    }
   }
+  if (usage) yield { type: "usage", ...usage };
 }
 
 // Klien dibuat sekali per instance server → koneksi (TLS) ke Voyage & Pinecone dipakai ulang.
@@ -242,63 +221,35 @@ async function retrieveDocuments(message) {
   const retrieved = queryResponse.matches || [];
   const { kept: matches, removed } = cleanMatches(retrieved);
 
-  return { matches, context: buildContext(matches), retrievedCount: retrieved.length, filteredCount: removed };
+  return { matches, retrievedCount: retrieved.length, filteredCount: removed };
 }
 
-// [PERBAIKAN 3]: Format konteks dokumen diperjelas biar AI gampang bacanya
-function buildContext(matches) {
-  return matches
-    // Tanpa nomor urut ("DOKUMEN 1") agar AI mengutip nama dokumen, bukan nomornya.
-    // Nama dokumen harus utuh supaya referensi di frontend bisa dicocokkan & dibuka.
-    .map((m) => `[Sumber: ${m.metadata?.title|| 'Tidak diketahui'} | Hal: ${m.metadata?.page || '?'}]\n${m.metadata?.text || ''}`)
-    .join("\n\n---\n\n");
+// Potongan tanpa judul di database ditulis "Tidak diketahui" di blok dokumen (lib/chatPrompt.js);
+// kutipan dengan nama itu tetap berasal dari dokumen yang dibaca, jadi tidak ditandai.
+const docTitlesOf = (matches) => [...new Set(matches.map((m) => m.metadata?.title || "Tidak diketahui"))];
+
+// Catatan pemakaian kuota: dibuat untuk setiap jawaban (termasuk yang dihentikan setelah AI
+// menulis), beserta model dan jumlah token dari penyedia (halaman Penggunaan).
+function usageData(userId, info = {}) {
+  return {
+    userId,
+    model: info.model ?? null,
+    mode: info.mode ?? null,
+    inputTokens: info.inputTokens ?? null,
+    outputTokens: info.outputTokens ?? null,
+  };
 }
 
-function buildSystemPrompt(context, user, preferences = {}) {
-  // ==========================================================
-  // [PERBAIKAN 1]: Personalisasi sebagai "Konteks Pasif" (Invisible Context)
-  // ==========================================================
-  const userCustomInstructions = user.personalContext
-    ? `\n[INFO LATAR BELAKANG PENGGUNA: "${user.personalContext}"]\n(PENTING: Gunakan info pengguna ini HANYA sebagai konteks untuk memahami niat pertanyaannya. JANGAN menyebutkan atau mengulang profil ini di dalam kalimat jawabanmu, kecuali pengguna bertanya langsung tentang dirinya. Berikan jawaban yang objektif dan to-the-point!)\n`
-    : "";
-
-  // ==========================================================
-  // [PERBAIKAN 2 & 3]: System Prompt dengan Aturan Format & Kutipan yang Strict
-  // ==========================================================
-  return `Anda adalah TanyaHukum, asisten hukum Indonesia yang ahli, profesional, dan terpercaya.
-
-TUGAS UTAMA: Jawab pertanyaan pengguna HANYA berdasarkan referensi Dokumen Hukum di bawah ini.
-
-=== DOKUMEN HUKUM ===
-${context}
-=====================
-${userCustomInstructions}
-
-ATURAN WAJIB (HARUS DIIKUTI 100%):
-1. KEAKURATAN: Jika jawaban tidak ada di Dokumen Hukum di atas, katakan: "Maaf, berdasarkan database hukum saat ini, saya belum menemukan informasi yang spesifik terkait pertanyaan Anda." Jangan pernah mengarang hukum/pasal!
-2. FORMAT JAWABAN (MARKDOWN): Gunakan format Markdown agar mudah dibaca. 
-   - Gunakan **huruf tebal (bold)** untuk istilah hukum atau poin penting.
-   - Gunakan bullet points (-) atau penomoran (1, 2, 3) untuk menjabarkan daftar, syarat, atau langkah-langkah.
-   - Buat paragraf yang singkat (maksimal 3-4 kalimat per paragraf).
-3. KUTIPAN SUMBER YANG JELAS: Setiap kali Anda menjelaskan suatu aturan, sanksi, atau pasal, Anda WAJIB meletakkan sumbernya di akhir poin atau paragraf tersebut. 
-   - Gunakan format ini: **(Sumber: [Nama Dokumen], Hal: [Nomor Halaman])**.
-   - Tulis Nama Dokumen PERSIS seperti teks setelah "Sumber:" pada referensi di atas, lengkap dan tanpa disingkat. JANGAN menulis "DOKUMEN", nomor urut dokumen, atau hanya nomor pasal sebagai sumber.
-   - Jika satu poin berasal dari beberapa dokumen, pisahkan dengan titik koma: **(Sumber: [Dokumen A], Hal: [x]; [Dokumen B], Hal: [y])**.
-   - Contoh: "...wajib melaporkan lowongan kerja **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**."
-4. GAYA BAHASA: Gunakan bahasa Indonesia yang baku namun mudah dipahami. Jangan bertele-tele dan jangan menggunakan salam pembuka yang berlebihan.
-5. RINGKAS & LANGSUNG: Kalimat pertama harus langsung menjawab inti pertanyaan, tanpa kalimat pembuka seperti "Berdasarkan dokumen hukum yang tersedia". Usahakan jawaban sekitar 150-250 kata, KECUALI pengguna meminta penjelasan rinci. Jangan mengulang pertanyaan dan jangan menambahkan poin yang tidak ditanyakan. Aturan kutipan sumber (aturan 3) tetap wajib.${buildPreferenceInstructions(preferences)}`;
-}
-
-// Simpan pertanyaan & jawaban ke riwayat (dibuat SETELAH AI sukses menjawab)
-async function recordUsage(userId) {
+async function recordUsage(userId, info) {
   try {
-    await prisma.promptUsage.create({ data: { userId } });
+    await prisma.promptUsage.create({ data: usageData(userId, info) });
   } catch (err) {
     console.error("Gagal mencatat pemakaian kuota:", err?.message);
   }
 }
 
-async function saveExchange({ existingChat, userId, message, answer }) {
+// Simpan pertanyaan & jawaban ke riwayat (dibuat SETELAH AI sukses menjawab)
+async function saveExchange({ existingChat, userId, message, answer, usage }) {
   // Pastikan user memiliki minimal satu chat session (Relasi Wajib)
   const chatSession = existingChat
     ? existingChat
@@ -321,7 +272,7 @@ async function saveExchange({ existingChat, userId, message, answer }) {
 
   await Promise.all([
     // Catat pemakaian kuota (tetap ada walau riwayat chat dihapus)
-    prisma.promptUsage.create({ data: { userId } }),
+    prisma.promptUsage.create({ data: usageData(userId, usage) }),
     // Simpan pertanyaan User
     prisma.chatHistory.create({
       data: {
@@ -360,14 +311,70 @@ async function saveExchange({ existingChat, userId, message, answer }) {
   return chatSession;
 }
 
+// Alasan cooldown yang disimpan: "limit_daily" dibedakan agar UI bisa menulis "kuota harian habis"
+const cooldownReasonOf = (info) => (info.daily ? "limit_daily" : info.kind);
+
+// Model gagal → dijeda di memori instance ini + tabel ModelStatus (dibaca instance lain lewat
+// syncCooldowns). Tidak pernah menunda/menggagalkan jawaban.
+function coolDown(c, info) {
+  if (!info.cooldownMs) return;
+  markCooldown(c.model, info.cooldownMs, cooldownReasonOf(info));
+  saveModelStatus(prisma, c.model, c.provider, {
+    cooldownUntil: new Date(Date.now() + info.cooldownMs),
+    cooldownReason: cooldownReasonOf(info),
+  }, { force: true });
+}
+
+// Kuota pertanyaan pengguna setelah pertanyaan ini tercatat (frontend memberi peringatan ≥ 70%)
+const quotaAfterAnswer = (q) => (q ? quotaStatus(q.used + 1, q.limit) : null);
+
+// Peringatan bila kuota harian model yang menjawab (seluruh aplikasi) sudah ≥ 70% terpakai.
+// Groq: dari header respons barusan (aktual). Gemini: estimasi, hanya bila GEMINI_DAILY_LIMITS diisi.
+async function modelDailyWarning(c) {
+  try {
+    let level;
+    if (c.provider === "groq") {
+      level = dailyUsageLevel({ provider: "groq", snapshot: rateLimitSnapshot(c.model) });
+    } else {
+      const limit = geminiDailyLimits().get(c.model);
+      if (!limit) return null;
+      const used = (await geminiAnswersToday(prisma, [c.model])).get(c.model) || 0;
+      level = dailyUsageLevel({ provider: "gemini", used, limit });
+    }
+    return level?.warning ? { model: c.model, name: modelName(c.model), percent: level.percent, source: level.source } : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistAvailable(model, provider) {
+  saveModelStatus(prisma, model, provider, {
+    ...rateLimitData(rateLimitSnapshot(model)),
+    cooldownUntil: null,
+    cooldownReason: null,
+  });
+}
+
+// Catatan guardrail yang ditambahkan server setelah jawaban selesai (tidak bergantung model)
+function guardrailNotes(answer, { questionType, docTitles }) {
+  const unverified = findUnverifiedCitations(answer, docTitles);
+  return {
+    text: unverifiedCitationNote(unverified) + consultationNote(answer, questionType),
+    unverifiedCount: unverified.length,
+  };
+}
+
 // ==========================================================
 // MODE STREAMING (transparansi proses)
 // Mengirim event NDJSON (satu JSON per baris) secara bertahap:
 //   { type: "step", step: "search" | "think" | "write", state: "active" | "done" }
 //   { type: "sources", count, docs: [{ title, page }] }   ← dokumen yang benar-benar dibaca AI
-//   { type: "thinking", text }                            ← ringkasan proses berpikir Gemini
+//   { type: "model", model, provider, mode, fallback }    ← model yang sedang dicoba
+//   { type: "fallback", fromLabel, toLabel, reason, restarted } ← model berganti otomatis
+//   { type: "reset" }                                     ← jawaban diulang dari awal
+//   { type: "thinking", text }                            ← ringkasan proses berpikir model
 //   { type: "text", text }                                ← potongan jawaban
-//   { type: "done", chatId, answer, durationMs }
+//   { type: "done", chatId, answer, durationMs, blocked? }
 //   { type: "error", error, limitReached? }
 // ==========================================================
 
@@ -397,11 +404,10 @@ function contentParts(content) {
     .filter((p) => p && p.text);
 }
 
-function streamChatResponse({ message, user, userId, existingChat, mode, preferences }) {
+function streamChatResponse({ message, user, userId, existingChat, mode, preferences, attack, questionType, quota }) {
   const encoder = new TextEncoder();
   const startedAt = Date.now();
-  const thinking = (MODE_CONFIG[mode] || MODE_CONFIG.deep).thinking;
-  const modelChain = modelChainFor(mode);
+  const selectedLabel = MODE_CONFIG[mode].label;
 
   // Tombol "Stop" di frontend membatalkan request → stream di-cancel → pemanggilan AI ikut dihentikan
   const abortController = new AbortController();
@@ -420,33 +426,86 @@ function streamChatResponse({ message, user, userId, existingChat, mode, prefere
       };
 
       try {
+        // 0. Permintaan membocorkan instruksi/kredensial: dijawab dengan pesan tetap.
+        //    AI tidak dipanggil, tidak ada yang disimpan, kuota tidak terpakai.
+        if (attack.block) {
+          console.warn("[AI-SECURITY] Permintaan informasi internal diblok:", attack.reason);
+          send({ type: "text", text: BLOCKED_REQUEST_MESSAGE });
+          send({ type: "done", chatId: existingChat?.id ?? null, answer: BLOCKED_REQUEST_MESSAGE, model: null, mode, blocked: true, durationMs: Date.now() - startedAt });
+          return;
+        }
+
+        // Cooldown dari instance lain dibaca bersamaan dengan pencarian dokumen (tidak menambah waktu tunggu)
+        const cooldownSync = syncCooldowns(prisma);
+
         // 1. Cari dokumen
         send({ type: "step", step: "search", state: "active" });
-        const { matches, context, retrievedCount, filteredCount } = await retrieveDocuments(message);
+        const { matches, retrievedCount, filteredCount } = await retrieveDocuments(message);
         if (cancelled) return; // dihentikan sebelum AI dipanggil → tidak ada yang disimpan
         const { uniqueCount, docs } = summarizeSources(matches);
         send({ type: "sources", count: retrievedCount, used: matches.length, filtered: filteredCount, uniqueCount, docs });
         send({ type: "step", step: "search", state: "done" });
 
-        // 2. AI berpikir & menulis. Jika kuota model habis sebelum teks muncul,
-        //    coba model cadangan berikutnya (transparan ke pengguna lewat event "model").
+        const evidence = assessEvidence(matches);
+        const docTitles = docTitlesOf(matches);
+        const { boundary, canary } = createRequestSecrets();
+        const guard = createOutputGuard({ canary, fingerprints: PROMPT_FINGERPRINTS, secrets: secretEnvValues() });
+
+        // 2. AI berpikir & menulis. Model dicoba sesuai rantai prioritas (hasil Ragas). Jika gagal
+        //    (kuota/token habis, server sibuk, timeout, dll.), pindah ke model berikutnya dan
+        //    pengguna diberi tahu; bila gagal di tengah jawaban, jawaban diulang dari awal.
         send({ type: "step", step: "think", state: "active" });
-        let answer = "";
+        await cooldownSync;
+        const chain = buildModelChain(mode);
         let writing = false;
-        let usedModel = null;
-        for (let i = 0; i < modelChain.length; i++) {
-          const { provider, model, maxChunks, reasoningEffort } = modelChain[i];
+        let used = null;
+        let usage = null;
+        let blockedOutput = null;
+        let lastError = null;
+        // Model pilihan dilewati sejak awal: sedang cooldown, atau tidak tersedia (mis. tanpa key Groq)
+        const selectedCooldown = cooldownOf(MODE_CONFIG[mode].model);
+        let previous = chain[0].mode !== mode
+          ? {
+              label: selectedLabel,
+              kind: !chain.some((c) => c.mode === mode && c.coolingDown) ? "unavailable"
+                : selectedCooldown?.reason === "limit_daily" ? "cooldown_daily" : "cooldown",
+              emitted: false,
+            }
+          : null;
+
+        for (let i = 0; i < chain.length; i++) {
+          const c = chain[i];
+          if (previous) {
+            if (previous.emitted) send({ type: "reset" });
+            send({ type: "fallback", fromLabel: previous.label, toLabel: c.label, reason: FALLBACK_REASON_TEXT[previous.kind] || FALLBACK_REASON_TEXT.unknown, restarted: previous.emitted });
+          }
+
           // Groq: konteks dibatasi ke potongan teratas agar muat dalam batas token gratis
-          const usedMatches = maxChunks ? matches.slice(0, maxChunks) : matches;
-          const systemPrompt = buildSystemPrompt(maxChunks ? buildContext(usedMatches) : context, user, preferences);
-          send({ type: "model", model, provider, mode, fallback: i > 0, contextChunks: usedMatches.length });
+          const usedMatches = c.maxChunks ? matches.slice(0, c.maxChunks) : matches;
+          const systemPrompt = buildSystemPrompt({
+            preferences, boundary, canary, questionType, evidence,
+            attackFlags: attack.flags, hasPersonalContext: !!user.personalContext,
+          });
+          const userContent = buildUserContent({ matches: usedMatches, personalContext: user.personalContext, message, boundary });
+          send({ type: "model", model: c.model, provider: c.provider, mode: c.mode, fallback: c.mode !== mode, contextChunks: usedMatches.length });
+
+          // Setiap percobaan punya pembatal sendiri (timeout), tetap ikut berhenti bila pengguna menekan Stop
+          const attempt = new AbortController();
+          const stopAttempt = () => attempt.abort();
+          abortController.signal.addEventListener("abort", stopAttempt);
+          guard.reset();
+          usage = null;
+          let emitted = false;
           try {
-            const parts = provider === "groq"
-              ? streamGroq({ model, thinking, reasoningEffort, systemPrompt, message, signal: abortController.signal })
-              : streamGemini({ model, thinking, systemPrompt, message, signal: abortController.signal });
-            for await (const part of parts) {
+            const parts = c.provider === "groq"
+              ? streamGroq({ model: c.model, thinking: c.thinking, reasoningEffort: c.reasoningEffort, systemPrompt, userContent, signal: attempt.signal })
+              : streamGemini({ model: c.model, thinking: c.thinking, systemPrompt, userContent, signal: attempt.signal });
+            for await (const part of withStreamTimeouts(parts, { ...STREAM_TIMEOUTS, onTimeout: stopAttempt })) {
               if (cancelled) break;
-              if (part.type === "thinking") {
+              if (part.type === "usage") {
+                usage = part;
+              } else if (part.type === "thinking") {
+                emitted = true;
                 send({ type: "thinking", text: part.text });
               } else {
                 if (!writing) {
@@ -454,45 +513,94 @@ function streamChatResponse({ message, user, userId, existingChat, mode, prefere
                   send({ type: "step", step: "think", state: "done" });
                   send({ type: "step", step: "write", state: "active" });
                 }
-                answer += part.text;
-                send({ type: "text", text: part.text });
+                emitted = true;
+                const r = guard.push(part.text);
+                if (r.blocked) {
+                  blockedOutput = r.blocked;
+                  stopAttempt();
+                  break;
+                }
+                if (r.emit) send({ type: "text", text: r.emit });
               }
             }
-            usedModel = model;
+            if (!cancelled && !blockedOutput) {
+              const r = guard.flush();
+              if (r.blocked) blockedOutput = r.blocked;
+              else if (r.emit) send({ type: "text", text: r.emit });
+              // Selesai tanpa teks jawaban = gagal → pindah ke model berikutnya
+              if (!blockedOutput && !guard.text.trim()) {
+                throw Object.assign(new Error(`Model ${c.model} selesai tanpa teks jawaban`), { emptyResponse: true });
+              }
+            }
+            used = c;
             break;
           } catch (llmError) {
             if (cancelled) break; // dihentikan pengguna, bukan error
-            console.error(`LLM Stream Error (${model}):`, llmError?.message);
-            const canFallback = canUseFallback(llmError) && !writing && i < modelChain.length - 1;
-            if (canFallback) continue;
-            if (isQuotaError(llmError)) {
-              send({ type: "error", error: QUOTA_ERROR_MESSAGE });
-              return;
-            }
-            throw llmError;
+            const info = classifyModelError(llmError, { provider: c.provider });
+            console.error(`LLM Stream Error (${c.model}) [${cooldownReasonOf(info)}]:`, llmError?.message);
+            coolDown(c, info);
+            lastError = info;
+            previous = { label: c.label, kind: cooldownReasonOf(info), emitted };
+            if (!info.fallback) break;
+          } finally {
+            abortController.signal.removeEventListener("abort", stopAttempt);
           }
         }
+
+        let answer = guard.text;
+        const usageInfo = { model: used?.model, mode: used?.mode, inputTokens: usage?.input, outputTokens: usage?.output };
 
         // Dihentikan pengguna (tombol Stop): tidak ada yang disimpan ke riwayat,
         // sehingga pertanyaan bisa diedit & dikirim ulang tanpa meninggalkan chat setengah jadi.
         // Jika AI sudah sempat menulis jawaban, kuota tetap terpakai (mencegah "Stop sebelum
         // selesai" dipakai untuk bertanya tanpa batas).
         if (cancelled) {
-          if (answer.trim()) await recordUsage(userId);
+          if (answer.trim()) await recordUsage(userId, usageInfo);
+          return;
+        }
+
+        if (!used) {
+          send({ type: "error", error: lastError?.kind === "limit" ? QUOTA_ERROR_MESSAGE : GENERIC_ERROR_MESSAGE });
+          return;
+        }
+
+        // Jawaban memuat informasi internal (prompt sistem, kredensial) → diganti, tidak disimpan.
+        // Model sudah menjawab, jadi kuota tetap terpakai.
+        if (blockedOutput) {
+          console.warn("[AI-SECURITY] Jawaban diblok:", blockedOutput);
+          await recordUsage(userId, usageInfo);
+          send({ type: "reset" });
+          send({ type: "text", text: BLOCKED_OUTPUT_MESSAGE });
+          send({ type: "step", step: "write", state: "done" });
+          send({ type: "done", chatId: existingChat?.id ?? null, answer: BLOCKED_OUTPUT_MESSAGE, model: used.model, mode: used.mode, blocked: true, quota: quotaAfterAnswer(quota), durationMs: Date.now() - startedAt });
           return;
         }
 
         if (!answer.trim()) throw new Error("Jawaban AI kosong");
 
-        // 3. Simpan ke riwayat (sama seperti mode JSON)
-        const chatSession = await saveExchange({ existingChat, userId, message, answer });
+        // 3. Guardrail setelah jawaban selesai: sumber yang tidak ada di dokumen & catatan konsultasi
+        const notes = guardrailNotes(answer, { questionType, docTitles });
+        if (notes.text) {
+          send({ type: "text", text: notes.text });
+          answer += notes.text;
+        }
+
+        // 4. Simpan ke riwayat (sama seperti mode JSON)
+        const chatSession = await saveExchange({ existingChat, userId, message, answer, usage: usageInfo });
         if (!chatSession) {
           send({ type: "error", error: "Sesi chat tidak ditemukan" });
           return;
         }
+        persistAvailable(used.model, used.provider);
+        const modelWarning = await modelDailyWarning(used);
 
         send({ type: "step", step: "write", state: "done" });
-        send({ type: "done", chatId: chatSession.id, answer, model: usedModel, mode, durationMs: Date.now() - startedAt });
+        send({
+          type: "done", chatId: chatSession.id, answer, model: used.model, mode: used.mode,
+          questionType, evidence: evidence.level, unverifiedCitations: notes.unverifiedCount,
+          quota: quotaAfterAnswer(quota), modelWarning,
+          durationMs: Date.now() - startedAt,
+        });
       } catch (error) {
         if (cancelled) return;
         console.error("API Chat Stream Error:", error);
@@ -552,7 +660,7 @@ export async function POST(req) {
     }
 
     // Mode jawaban dari pengguna (whitelist). Default: "deep" (perilaku sebelumnya).
-    const mode = CHAT_MODES.includes(body.mode) ? body.mode : "deep";
+    const mode = CHAT_MODES.includes(body.mode) ? body.mode : DEFAULT_MODE;
     // Preferensi gaya jawaban: hanya nilai dari whitelist yang dipakai
     const preferences = sanitizePreferences(body.preferences);
 
@@ -560,9 +668,8 @@ export async function POST(req) {
       return NextResponse.json({ error: "Sesi chat tidak ditemukan" }, { status: 404 });
     }
 
-    // Hitung jumlah chat user HARI INI
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0); // Set waktu ke 00:00:00 hari ini
+    // Hitung jumlah pertanyaan user HARI INI (tengah malam waktu server)
+    const startOfDay = startOfQuotaDay();
 
     // Tiga query baca dijalankan bersamaan (sebelumnya berurutan) → hemat ±2 kali
     // perjalanan bolak-balik ke database. Urutan pengecekan di bawah tetap sama.
@@ -593,20 +700,24 @@ export async function POST(req) {
     }
 
     // ==========================================================
-    // [MODIFIKASI PENTING]: Keputusan Gatekeeper dengan Jalur VIP
+    // Gatekeeper kuota: PRO aktif tanpa batas; FREE (dan PRO 30 hari yang sudah berakhir)
+    // dibatasi per hari.
     // ==========================================================
-    
-    // Tolak JIKA user adalah FREE dan limitnya habis.
-    // Jika user adalah PRO, blok if ini otomatis dilewati (Bypass)!
-    if (user.tier === "FREE" && chatsTodayCount >= user.promptLimit) {
+    if (effectivePlan(user).expired) await downgradeIfExpired(prisma, user);
+    const dailyLimit = dailyLimitFor(user);
+    if (dailyLimit !== null && chatsTodayCount >= dailyLimit) {
       return NextResponse.json(
-        { 
+        {
           error: "Limit pertanyaan harian Anda sudah habis. Silakan upgrade ke PRO untuk akses tanpa batas.",
           limitReached: true // Flag khusus agar Frontend tahu ini error karena limit
-        }, 
+        },
         { status: 403 }
       );
     }
+
+    // Keamanan AI & guardrail hukum (deteksi di server sebelum AI dipanggil)
+    const attack = detectPromptAttack(message);
+    const { type: questionType } = classifyQuestion(message);
 
     // ==========================================================
     // LOGIKA RAG AI
@@ -616,50 +727,85 @@ export async function POST(req) {
     // proses secara langsung (tahap pencarian, dokumen, ringkasan berpikir AI, teks jawaban).
     // Tanpa flag ini, respons tetap JSON seperti sebelumnya.
     if (body.stream === true) {
-      return streamChatResponse({ message, user, userId, existingChat, mode, preferences });
+      return streamChatResponse({
+        message, user, userId, existingChat, mode, preferences, attack, questionType,
+        quota: { used: chatsTodayCount, limit: dailyLimit },
+      });
     }
 
-    const { context } = await retrieveDocuments(message);
+    if (attack.block) {
+      console.warn("[AI-SECURITY] Permintaan informasi internal diblok:", attack.reason);
+      return NextResponse.json({ answer: BLOCKED_REQUEST_MESSAGE, chatId: existingChat?.id ?? null, blocked: true });
+    }
+
+    const { matches } = await retrieveDocuments(message);
+    const evidence = assessEvidence(matches);
+    const { boundary, canary } = createRequestSecrets();
     const promptMessages = [
-      new SystemMessage(buildSystemPrompt(context, user, preferences)),
-      new HumanMessage(message),
+      new SystemMessage(buildSystemPrompt({
+        preferences, boundary, canary, questionType, evidence,
+        attackFlags: attack.flags, hasPersonalContext: !!user.personalContext,
+      })),
+      new HumanMessage(buildUserContent({ matches, personalContext: user.personalContext, message, boundary })),
     ];
 
-    // Mode JSON: thinking default model (perilaku lama), dengan model cadangan saat kuota habis
+    // Mode JSON: hanya model Gemini (tanpa streaming), urutan sesuai prioritas, dengan cadangan
+    await syncCooldowns(prisma);
+    const chain = buildModelChain(mode).filter((c) => c.provider === "gemini");
     let response;
-    for (let i = 0; i < MODEL_CHAIN.length; i++) {
+    let used;
+    let lastError;
+    for (const c of chain) {
       try {
-        response = await createLlm(MODEL_CHAIN[i]).invoke(promptMessages);
+        response = await createLlm(c.model).invoke(promptMessages);
+        const text = typeof response.content === "string" ? response.content : contentParts(response.content).filter((p) => p.type === "text").map((p) => p.text).join("");
+        if (!text.trim()) throw Object.assign(new Error(`Model ${c.model} selesai tanpa teks jawaban`), { emptyResponse: true });
+        used = c;
         break;
       } catch (llmError) {
-        console.error(`LLM Error (${MODEL_CHAIN[i]}):`, llmError?.message);
-        if (canUseFallback(llmError) && i < MODEL_CHAIN.length - 1) continue;
-        if (isQuotaError(llmError)) {
-          return NextResponse.json(
-            { error: QUOTA_ERROR_MESSAGE },
-            { status: 429 }
-          );
-        }
-        throw llmError;
+        const info = classifyModelError(llmError, { provider: c.provider });
+        console.error(`LLM Error (${c.model}) [${cooldownReasonOf(info)}]:`, llmError?.message);
+        coolDown(c, info);
+        lastError = info;
+        if (!info.fallback) break;
       }
     }
+    if (!used) {
+      if (lastError?.kind === "limit") {
+        return NextResponse.json({ error: QUOTA_ERROR_MESSAGE }, { status: 429 });
+      }
+      throw new Error("Semua model gagal menjawab");
+    }
+
+    const usageInfo = {
+      model: used.model, mode: used.mode,
+      inputTokens: response.usage_metadata?.input_tokens, outputTokens: response.usage_metadata?.output_tokens,
+    };
+    let answer = typeof response.content === "string" ? response.content : contentParts(response.content).filter((p) => p.type === "text").map((p) => p.text).join("");
+
+    if (scanOutput(answer, { canary, fingerprints: PROMPT_FINGERPRINTS, secrets: secretEnvValues() })) {
+      console.warn("[AI-SECURITY] Jawaban diblok (mode JSON)");
+      await recordUsage(userId, usageInfo);
+      return NextResponse.json({ answer: BLOCKED_OUTPUT_MESSAGE, chatId: existingChat?.id ?? null, blocked: true });
+    }
+    answer += guardrailNotes(answer, { questionType, docTitles: docTitlesOf(matches) }).text;
 
     // ==========================================================
     // 4. Rekam Jejak ke Database (Setelah AI sukses menjawab)
     // ==========================================================
-    const chatSession = await saveExchange({ existingChat, userId, message, answer: response.content });
+    const chatSession = await saveExchange({ existingChat, userId, message, answer, usage: usageInfo });
 
     if (!chatSession) {
        return NextResponse.json({ error: "Sesi chat tidak ditemukan" }, { status: 404 });
     }
 
     // 5. Kembalikan respons ke Frontend
-    return NextResponse.json({ answer: response.content, chatId: chatSession.id });
+    return NextResponse.json({ answer, chatId: chatSession.id, quota: quotaStatus(chatsTodayCount + 1, dailyLimit) });
 
   } catch (error) {
     console.error("API Chat Error:", error);
     return NextResponse.json(
-      { error: "Terjadi kesalahan pada server saat memproses pertanyaan hukum." }, 
+      { error: "Terjadi kesalahan pada server saat memproses pertanyaan hukum." },
       { status: 500 }
     );
   }

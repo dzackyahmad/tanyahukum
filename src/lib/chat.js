@@ -122,7 +122,12 @@ async function readChatStream({ message, chatId, mode, onEvent, signal }) {
       return;
     }
     if (event.type === "error") throw { error: event.error, limitReached: event.limitReached };
-    if (event.type === "done") result = { answer: event.answer, chatId: event.chatId, durationMs: event.durationMs };
+    if (event.type === "done") {
+      result = {
+        answer: event.answer, chatId: event.chatId, durationMs: event.durationMs, blocked: !!event.blocked,
+        quota: event.quota ?? null, modelWarning: event.modelWarning ?? null,
+      };
+    }
     onEvent?.(event);
   };
 

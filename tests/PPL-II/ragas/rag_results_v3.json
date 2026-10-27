@@ -55,14 +55,54 @@
         "error": null
       },
       "deep": {
-        "response": "",
+        "response": "Perjanjian Kerja Waktu Tertentu (**PKWT**) berdasarkan jangka waktu dapat dibuat untuk paling lama **5 (lima) tahun** **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n\nAdapun ketentuan mengenai perpanjangan PKWT berdasarkan jangka waktu adalah sebagai berikut:\n\n- **Kesepakatan Perpanjangan**: Dalam hal jangka waktu PKWT akan berakhir dan pekerjaan yang dilaksanakan belum selesai, dapat dilakukan perpanjangan PKWT sesuai kesepakatan antara Pengusaha dengan Pekerja/Buruh **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n- **Batas Akumulasi Waktu**: Jangka waktu keseluruhan PKWT beserta perpanjangannya **tidak boleh lebih dari 5 (lima) tahun** dan hanya boleh diperpanjang **1 (satu) kali** **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n- **Perhitungan Masa Kerja**: Masa kerja Pekerja/Buruh dalam hal perpanjangan PKWT tetap dihitung sejak terjadinya Hubungan Kerja pertama kali berdasarkan PKWT **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 46,
+        "firstTextMs": 11294,
+        "totalMs": 14966,
+        "error": null
+      },
+      "lite-think": {
+        "response": "Perjanjian Kerja Waktu Tertentu (**PKWT**) berdasarkan jangka waktu dapat dibuat untuk paling lama **5 (lima) tahun** **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n\nKetentuan perpanjangan PKWT tersebut meliputi:\n- Jika jangka waktu PKWT akan berakhir namun pekerjaan belum selesai, dapat dilakukan **perpanjangan** atas kesepakatan antara pengusaha dan pekerja/buruh **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n- Total akumulasi jangka waktu keseluruhan PKWT beserta perpanjangannya adalah **tidak lebih dari 5 (lima) tahun** **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n- **Masa kerja** pekerja/buruh pada saat perpanjangan tetap dihitung **sejak terjadinya hubungan kerja** berdasarkan PKWT **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.",
         "model": "gemini-3.5-flash-lite",
         "provider": "gemini",
-        "fallback": true,
+        "fallback": false,
         "contextChunks": 46,
-        "firstTextMs": null,
-        "totalMs": 2873,
-        "error": "Kuota AI hari ini telah habis. Silakan coba lagi nanti."
+        "firstTextMs": 8877,
+        "totalMs": 11376,
+        "error": null
+      },
+      "next-fast": {
+        "response": "PKWT berdasarkan jangka waktu dapat dibuat untuk jangka waktu paling lama **5 (lima) tahun** **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n\nAdapun ketentuan mengenai perpanjangan PKWT berdasarkan jangka waktu meliputi:\n\n- **Batas Waktu Perpanjangan**: Perpanjangan dapat dilakukan jika pekerjaan belum selesai, dengan ketentuan jangka waktu keseluruhan PKWT beserta perpanjangannya **tidak lebih dari 5 (lima) tahun** dan hanya boleh diperpanjang **1 (satu) kali** **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n- **Pemberitahuan Tertulis**: Pengusaha yang bermaksud memperpanjang PKWT wajib memberitahukan maksudnya secara tertulis kepada pekerja/buruh paling lama **7 (tujuh) hari** sebelum PKWT berakhir **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n- **Perhitungan Masa Kerja**: Masa kerja pekerja/buruh dalam hal perpanjangan PKWT tetap dihitung sejak awal terjadinya Hubungan Kerja berdasarkan PKWT **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.\n- **Pelaporan**: Perpanjangan PKWT wajib dilaporkan kepada Perangkat Daerah yang menyelenggarakan urusan pemerintahan di bidang tenaga kerja **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 46,
+        "firstTextMs": 8931,
+        "totalMs": 12246,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "PKWT yang didasarkan atas jangka waktu tertentu dapat dibuat **paling lama 5 (lima) tahun** dan **hanya boleh diperpanjang satu kali** dengan total akumulasi masa kerja tidak melebihi 5 (lima) tahun. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2541,
+        "totalMs": 4570,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "**PKWT yang didasarkan atas jangka waktu tertentu** dapat diadakan untuk **paling lama 5 (lima) tahun** dan **hanya boleh diperpanjang 1 (satu) kali** dengan **jumlah akumulasi 5 (lima) tahun**. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**\n\nKetentuan tambahan yang perlu diperhatikan:\n\n- **Masa kerja** Pekerja/Buruh dalam hal perpanjangan jangka waktu PKWT tetap dihitung **sejak terjadinya Hubungan Kerja** berdasarkan PKWT, bukan sejak tanggal perpanjangan. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**\n- **PKWT tidak dapat diadakan untuk pekerjaan yang bersifat tetap.** **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**\n\nDengan demikian, skenario maksimalnya adalah: PKWT awal (misalnya 3 tahun) + perpanjangan 1 kali (misalnya 2 tahun) = total akumulasi **5 tahun**. Setelah itu, hubungan kerja tidak boleh lagi diperpanjang sebagai PKWT.",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2879,
+        "totalMs": 5196,
+        "error": null
       }
     },
     "contexts": [
@@ -170,14 +210,54 @@
         "error": null
       },
       "deep": {
-        "response": "",
+        "response": "Pengusaha yang mempekerjakan pekerja/buruh perempuan antara pukul 23.00 sampai dengan 07.00 wajib memenuhi ketentuan berikut:\n\n1. **Memberikan makanan dan minuman bergizi** paling sedikit 1.400 kalori.\n2. **Menjaga kesusilaan dan keamanan** selama berada di tempat kerja.\n3. **Menyediakan antar jemput** bagi pekerja perempuan yang berangkat dan pulang bekerja antara pukul 23.00 sampai dengan 05.00.\n4. **Melaporkan pelaksanaan kerja malam hari** bagi pekerja perempuan kepada Perangkat Daerah yang menyelenggarakan urusan pemerintahan bidang tenaga kerja, dengan menyertakan:\n   - Daftar pekerja perempuan yang terdiri dari nama, alamat, dan usia.\n   - Nama dan alamat Perusahaan.\n\nSelain kewajiban tersebut, pengusaha juga dilarang mempekerjakan pekerja/buruh perempuan hamil antara pukul 23.00 sampai dengan 07.00 apabila menurut surat keterangan dokter hal itu berbahaya bagi kesehatan dan keselamatan kandungan maupun dirinya.\n\n**(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 50,
+        "firstTextMs": 12044,
+        "totalMs": 15018,
+        "error": null
+      },
+      "lite-think": {
+        "response": "Pengusaha yang mempekerjakan pekerja/buruh perempuan antara pukul 23.00 sampai dengan 07.00 wajib memenuhi ketentuan sebagai berikut:\n\n* Memberikan **makanan dan minuman yang bergizi** dengan kandungan kalori paling sedikit 1.400 kalori **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* Menjaga **kesusilaan dan keamanan** selama pekerja berada di tempat kerja **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* Menyediakan fasilitas **antar jemput** bagi pekerja perempuan yang berangkat dan pulang bekerja antara pukul 23.00 sampai dengan 05.00 **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* Melaporkan pelaksanaan kerja malam hari kepada **Perangkat Daerah** yang menyelenggarakan urusan pemerintahan di bidang tenaga kerja **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* Menyertakan **daftar pekerja perempuan** yang memuat nama, alamat, usia, serta nama dan alamat perusahaan dalam laporan tersebut **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.",
         "model": "gemini-3.5-flash-lite",
         "provider": "gemini",
-        "fallback": true,
+        "fallback": false,
         "contextChunks": 50,
-        "firstTextMs": null,
-        "totalMs": 2876,
-        "error": "Kuota AI hari ini telah habis. Silakan coba lagi nanti."
+        "firstTextMs": 9134,
+        "totalMs": 11656,
+        "error": null
+      },
+      "next-fast": {
+        "response": "Pengusaha yang mempekerjakan pekerja/buruh perempuan antara pukul 23.00 sampai dengan 07.00 memiliki kewajiban sebagai berikut:\n\n1. **Memberikan makanan dan minuman yang bergizi** paling sedikit 1.400 kalori.\n2. **Menjaga kesusilaan dan keamanan** selama berada di tempat kerja.\n3. **Menyediakan fasilitas antar jemput** bagi pekerja perempuan yang berangkat dan pulang bekerja antara pukul 23.00 sampai dengan 05.00.\n4. **Melaporkan pelaksanaan kerja** bagi perempuan yang bekerja pada malam hari kepada Perangkat Daerah yang menyelenggarakan urusan pemerintahan bidang tenaga kerja. Laporan tersebut wajib menyertakan:\n   - Daftar pekerja perempuan yang terdiri dari nama, alamat, dan usia; serta\n   - Nama dan alamat Perusahaan.\n\n**(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**\n\nSelain itu, pengusaha **dilarang mempekerjakan** pekerja/buruh perempuan hamil antara pukul 23.00 sampai dengan 07.00 apabila menurut surat keterangan dokter hal tersebut berbahaya bagi kesehatan dan keselamatan kandungannya maupun dirinya **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 50,
+        "firstTextMs": 4407,
+        "totalMs": 7659,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "- **Memberikan makanan dan minuman bergizi** dengan nilai paling sedikit **1 400 kalori** per hari. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**  \n- **Menjaga kesusilaan dan keamanan** selama pekerja berada di tempat kerja pada malam hari. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**  \n- **Menyediakan layanan antar‑jemput** bagi pekerja perempuan yang berangkat atau pulang antara pukul **23.00‑05.00**. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**  \n- **Melaporkan pelaksanaan kerja malam** kepada perangkat daerah yang menyelenggarakan urusan pemerintahan bidang tenaga kerja, dengan melampirkan:  \n  1. Daftar pekerja perempuan (nama, alamat, usia).  \n  2. Nama dan alamat perusahaan. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**  ",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2613,
+        "totalMs": 4704,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "## Kewajiban Pengusaha untuk Pekerja Perempuan yang Bekerja Malam (23.00–07.00)\n\nMenurut **Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023**, pengusaha yang mempekerjakan pekerja/buruh perempuan antara pukul 23.00 sampai dengan 07.00 **wajib** memenuhi ketentuan berikut:\n\n1. **Memberikan makanan dan minuman bergizi** – paling sedikit **1.400 kalori**.\n2. **Menjaga kesusilaan dan keamanan** selama di tempat kerja.\n3. **Menyediakan antar-jemput** bagi pekerja perempuan yang berangkat dan pulang bekerja antara pukul **23.00 sampai dengan 05.00**.\n4. **Melaporkan pelaksanaan kerja malam** kepada Perangkat Daerah yang menyelenggarakan urusan pemerintahan bidang tenaga kerja, dengan menyertakan:\n   - daftar pekerja perempuan (nama, alamat, dan usia);\n   - nama dan alamat perusahaan.\n\n**(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**\n\n### Larangan Tambahan\n\nSelain kewajiban di atas, terdapat **larangan khusus**: pengusaha **dilarang** mempekerjakan pekerja/buruh perempuan **hamil** yang menurut surat keterangan dokter berbahaya bagi kesehatan dan keselamatan kandungannya maupun dirinya sendiri, apabila bekerja antara pukul 23.00 sampai dengan 07.00. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**\n\n### Hak Menyusui\n\nTerkait perlindungan tambahan, setiap pekerja/buruh perempuan yang anaknya masih menyusui **harus diberi kesempatan sepatutnya** pada waktu kerja untuk menyusui anaknya. Lamanya waktu menyusui diatur dalam **peraturan perusahaan** atau **perjanjian kerja bersama**, dengan memperhatikan tersedianya tempat yang sesuai dengan kondisi dan kemampuan perusahaan. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50; Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 51-55)**",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2910,
+        "totalMs": 5626,
+        "error": null
       }
     },
     "contexts": [
@@ -289,14 +369,54 @@
         "error": null
       },
       "deep": {
-        "response": "",
+        "response": "Hak-hak pekerja/buruh perempuan serta ketentuan larangan Pemutusan Hubungan Kerja (PHK) diatur secara jelas dalam Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023 sebagai berikut:\n\n* **Larangan Pemutusan Hubungan Kerja (PHK):** Pengusaha dilarang melakukan PHK terhadap pekerja/buruh perempuan dengan alasan menikah, hamil, melahirkan, gugur kandungan, atau menyusui bayinya **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* **Hak Terkait Haid:** Pekerja/buruh perempuan yang merasakan sakit dalam masa haid dan memberitahukannya kepada pengusaha, tidak wajib bekerja pada hari pertama dan hari kedua waktu haid **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* **Hak Terkait Melahirkan:** \n  1. Berhak memperoleh istirahat/cuti selama 1,5 (satu setengah) bulan sebelum melahirkan dan 1,5 (satu setengah) bulan sesudah melahirkan berdasarkan perhitungan dokter kandungan atau bidan **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n  2. Pengusaha wajib mempekerjakan kembali pekerja/buruh perempuan yang telah selesai menjalankan cuti hamil/melahirkan pada jabatan semula atau jabatan yang setara tanpa mengurangi hak-haknya **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* **Hak Terkait Menyusui:** Pekerja/buruh perempuan yang anaknya masih menyusui wajib diberi kesempatan sepatutnya pada waktu kerja untuk menyusui anaknya. Perusahaan juga diwajibkan menyediakan fasilitas kesejahteraan seperti ruang laktasi dengan memperhatikan kebutuhan pekerja serta kemampuan perusahaan **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25; Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50; Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 51-55)**.",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 50,
+        "firstTextMs": 15044,
+        "totalMs": 19729,
+        "error": null
+      },
+      "lite-think": {
+        "response": "Pekerja/buruh perempuan memiliki hak-hak khusus serta perlindungan hukum tertentu terkait haid, melahirkan, menyusui, serta larangan pemutusan hubungan kerja, yaitu:\n\n- **Larangan Pemutusan Hubungan Kerja (PHK)**: Pengusaha dilarang melakukan PHK terhadap pekerja/buruh perempuan dengan alasan **menikah**, **hamil**, **melahirkan**, **gugur kandungan**, atau **menyusui bayinya**.\n- **Hak Cuti Haid**: Pekerja/buruh perempuan yang merasakan sakit pada masa **haid** dan memberitahukannya kepada pengusaha, tidak wajib bekerja pada **hari pertama dan kedua** pada waktu haid.\n- **Hak Istirahat Melahirkan**: Pekerja/buruh perempuan berhak memperoleh waktu **istirahat** selama **1,5 (satu setengah) bulan sebelum melahirkan** dan **1,5 (satu setengah) bulan sesudah melahirkan** menurut perhitungan dokter kandungan atau bidan.\n- **Kewajiban Penempatan Kembali**: Pengusaha wajib **mempekerjakan kembali** pekerja/buruh perempuan yang telah selesai menjalankan cuti hamil atau melahirkan pada **jabatan semula atau yang setara** tanpa mengurangi hak-haknya.\n- **Hak Menyusui**: Setiap pekerja/buruh perempuan yang anaknya masih menyusui harus diberikan **kesempatan sepatutnya** pada waktu kerja untuk menyusui anaknya.\n\n**(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**",
         "model": "gemini-3.5-flash-lite",
         "provider": "gemini",
-        "fallback": true,
+        "fallback": false,
         "contextChunks": 50,
-        "firstTextMs": null,
-        "totalMs": 3060,
-        "error": "Kuota AI hari ini telah habis. Silakan coba lagi nanti."
+        "firstTextMs": 5810,
+        "totalMs": 8247,
+        "error": null
+      },
+      "next-fast": {
+        "response": "Berikut adalah hak-hak pekerja/buruh perempuan terkait haid, melahirkan, dan menyusui, serta larangan pemutusan hubungan kerja (PHK) berdasarkan ketentuan hukum:\n\n* **Hak Istirahat Haid:** Pekerja/buruh perempuan yang merasakan sakit pada masa haid dan memberitahukan kepada pengusaha tidak wajib bekerja pada hari pertama dan hari kedua waktu haid **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* **Hak Istirahat Melahirkan:** Berhak memperoleh istirahat/cuti selama 1,5 (satu setengah) bulan sebelum melahirkan dan 1,5 (satu setengah) bulan sesudah melahirkan menurut perhitungan dokter kandungan atau bidan **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* **Jaminan Pekerjaan Pasca Melahirkan:** Pengusaha wajib mempekerjakan kembali pekerja/buruh perempuan yang telah selesai menjalankan cuti hamil/melahirkan pada jabatan semula atau yang setara tanpa mengurangi hak-haknya **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.\n* **Hak Menyusui Anak:** Pekerja/buruh perempuan yang anaknya masih menyusui harus diberikan kesempatan sepatutnya pada waktu kerja untuk menyusui bayinya **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**. Kesempatan sepatutnya diatur dalam Peraturan Perusahaan atau Perjanjian Kerja Bersama dengan memperhatikan ketersediaan tempat yang sesuai **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 51-55)**.\n* **Larangan Pemutusan Hubungan Kerja (PHK):** Pengusaha dilarang keras melakukan PHK terhadap pekerja/buruh perempuan dengan alasan menikah, hamil, melahirkan, gugur kandungan, atau menyusui bayinya **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**.",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 50,
+        "firstTextMs": 8622,
+        "totalMs": 13120,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "- **Hak selama haid**  \n  - Pekerja/buruh perempuan yang mengalami sakit haid dan memberitahukan hal tersebut kepada pengusaha tidak wajib bekerja pada hari pertama dan kedua haid. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**  \n\n- **Hak cuti melahirkan**  \n  - Berhak memperoleh istirahat **1,5 bulan sebelum melahirkan** dan **1,5 bulan setelah melahirkan** sesuai perhitungan dokter kandungan atau bidan. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**  \n  - Pengusaha wajib mempekerjakan kembali pekerja/buruh perempuan yang telah selesai cuti hamil/melahirkan pada jabatan semula atau jabatan yang setara, tanpa mengurangi hak‑haknya. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**  \n\n- **Hak menyusui**  \n  - Setiap pekerja/buruh perempuan yang anaknya masih menyusui harus diberi **kesempatan sepatutnya** pada waktu kerja untuk menyusui anaknya, dengan memperhatikan tersedianya tempat yang sesuai (mis. ruang laktasi). **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 51-55; Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 54)**  \n\n- **Larangan pemutusan hubungan kerja (PHK)**  \n  - Pengusaha **dilarang** melakukan PHK terhadap pekerja/buruh perempuan dengan alasan **menikah, hamil, melahirkan, gugur kandungan, atau menyusui**. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**  ",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 3372,
+        "totalMs": 5897,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "## Hak Pekerja/Buruh Perempuan & Larangan PHK (Perda Kota Salatiga No. 9 Tahun 2023)\n\n### Larangan Pemutusan Hubungan Kerja\n\nPengusaha **dilarang** melakukan pemutusan hubungan kerja (PHK) terhadap pekerja/buruh perempuan dengan alasan:\n\n- Menikah\n- Hamil\n- Melahirkan\n- Gugur kandungan\n- Menyusui bayinya\n\n**(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**\n\n### Hak Terkait Haid\n\nPekerja/buruh perempuan yang dalam masa haid **merasakan sakit** dan **memberitahukan** kepada pengusaha, **tidak wajib bekerja** pada **hari pertama dan kedua** pada waktu haid. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**\n\n### Hak Terkait Melahirkan (Cuti Hamil/Melahirkan)\n\n- Pekerja/buruh perempuan berhak memperoleh istirahat selama **1,5 (satu setengah) bulan sebelum** saatnya melahirkan dan **1,5 (satu setengah) bulan sesudah** melahirkan, menurut perhitungan dokter kandungan atau bidan.\n- Pengusaha **wajib mempekerjakan kembali** pekerja/buruh perempuan yang telah selesai menjalankan cuti hamil/melahirkan pada **jabatan semula atau yang setara** tanpa mengurangi hak-haknya.\n\n**(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50)**\n\n### Hak Terkait Menyusui\n\n- Setiap pekerja/buruh perempuan yang anaknya masih menyusui **harus diberi kesempatan sepatutnya** pada waktu kerja untuk menyusui anaknya.\n- **Kesempatan sepatutnya** diartikan sebagai lamanya waktu yang diberikan untuk menyusui bayinya, dengan memperhatikan **tersedianya tempat yang sesuai** dengan kondisi dan kemampuan perusahaan, yang diatur dalam **peraturan perusahaan atau perjanjian kerja bersama**.\n\n**(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 26-50; Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 51-55)**\n\n### Fasilitas Pendukung\n\nSetiap perusahaan wajib menyediakan fasilitas kesejahteraan yang antara lain mencakup **ruang laktasi** dan **tempat penitipan anak**, dengan memperhatikan kebutuhan pekerja/buruh dan kemampuan perusahaan. **(Sumber: Regulasi Ketenagakerjaan - 2023pd3332009, Hal: 1-25)**",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 3318,
+        "totalMs": 6305,
+        "error": null
       }
     },
     "contexts": [
@@ -406,6 +526,56 @@
         "firstTextMs": 36649,
         "totalMs": 39346,
         "error": null
+      },
+      "lite-think": {
+        "response": "Lembaga Kerja Sama Tripartit Nasional (**LKS Tripartit Nasional**) dibentuk oleh Presiden untuk memberikan pertimbangan dan saran terkait ketenagakerjaan nasional, dengan susunan keanggotaan yang berasal dari unsur pemerintah, pengusaha, serta serikat pekerja **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005 | Hal: 1-25)**.\n\nBerikut adalah rincian lengkapnya:\n\n* **Pembentukan dan Pertanggungjawaban**: **LKS Tripartit Nasional** dibentuk oleh serta bertanggung jawab kepada **Presiden** **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005 | Hal: 1-25)**.\n* **Tugas**: Mempunyai tugas memberikan **pertimbangan, saran, dan pendapat** kepada Presiden dan pihak terkait dalam penyusunan kebijakan serta pemecahan **masalah ketenagakerjaan secara nasional** **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005 | Hal: 1-25)**.\n* **Unsur Keanggotaan**: Terdiri dari unsur:\n  1. **Pemerintah**\n  2. **Organisasi pengusaha**\n  3. **Serikat pekerja/serikat buruh**\n  **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005 | Hal: 1-25)**",
+        "model": "gemini-3.5-flash-lite",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 48,
+        "firstTextMs": 7687,
+        "totalMs": 10587,
+        "error": null
+      },
+      "deep": {
+        "response": "Lembaga Kerja Sama (LKS) Tripartit Nasional dibentuk oleh **Presiden** **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**. \n\nBerikut adalah tugas dan unsur keanggotaan LKS Tripartit Nasional berdasarkan Peraturan Pemerintah Nomor 8 Tahun 2005:\n\n* **Tugas LKS Tripartit Nasional**  \n  Memberikan pertimbangan, saran, dan pendapat kepada Presiden dan pihak terkait dalam penyusunan kebijakan serta pemecahan masalah ketenagakerjaan secara nasional **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**.\n\n* **Unsur Keanggotaan**  \n  Keanggotaan LKS Tripartit Nasional terdiri dari 3 (tiga) unsur **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**:\n  1. **Unsur Pemerintah**\n  2. **Organisasi pengusaha**\n  3. **Serikat pekerja/serikat buruh**",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 48,
+        "firstTextMs": 10296,
+        "totalMs": 13796,
+        "error": null
+      },
+      "next-fast": {
+        "response": "**LKS Tripartit Nasional** dibentuk oleh **Presiden** dan memiliki tugas serta susunan unsur keanggotaan sebagai berikut:\n\n* **Pihak yang Membentuk**: LKS Tripartit Nasional dibentuk oleh **Presiden** dan bertanggung jawab langsung kepada Presiden **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**.\n* **Tugas**: Bertugas memberikan pertimbangan, saran, dan pendapat kepada Presiden dan pihak terkait dalam penyusunan kebijakan serta pemecahan masalah ketenagakerjaan secara nasional **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**.\n* **Unsur Keanggotaan**: Keanggotaan LKS Tripartit Nasional terdiri dari 3 (tiga) unsur, yaitu:\n  1. **Pemerintah**\n  2. **Organisasi pengusaha**\n  3. **Serikat pekerja/serikat buruh**\n  **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 48,
+        "firstTextMs": 10700,
+        "totalMs": 13958,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "**Pembentukan**  \nLKS Tripartit Nasional dibentuk oleh **Presiden Republik Indonesia** dan bertanggung jawab kepada Presiden. **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**  \n\n**Tugas**  \nLKS Tripartit Nasional mempunyai tugas memberikan **pertimbangan, saran, dan pendapat** kepada Presiden dan pihak terkait dalam penyusunan kebijakan serta pemecahan masalah ketenagakerjaan secara nasional. **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**  \n\n**Keanggotaan**  \nKeanggotaan LKS Tripartit Nasional terdiri dari unsur:  \n\n- **Pemerintah** (perwakilan instansi yang bertanggung jawab di bidang ketenagakerjaan)  \n- **Organisasi pengusaha**  \n- **Serikat pekerja/serikat buruh**  \n\nSusunan keanggotaannya meliputi:  \n\n1. **Ketua** (merangkap anggota) dijabat oleh Menteri.  \n2. **Tiga Wakil Ketua** (merangkap anggota) masing‑masing mewakili unsur Pemerintah, organisasi pengusaha, dan serikat pekerja/buruh.  \n3. **Sekretaris** (merangkap anggota) mewakili unsur Pemerintah.  \n4. **Beberapa orang anggota** tambahan sesuai kebutuhan, dengan total maksimal **24 orang**. **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**  ",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2911,
+        "totalMs": 5260,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "## Pembentukan, Tugas, dan Keanggotaan LKS Tripartit Nasional\n\n**Pembentukan:** LKS Tripartit Nasional dibentuk oleh **Presiden** dan bertanggung jawab kepada Presiden. **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**\n\n**Tugas:** LKS Tripartit Nasional bertugas memberikan **pertimbangan, saran, dan pendapat** kepada Presiden dan pihak terkait dalam penyusunan kebijakan dan pemecahan masalah ketenagakerjaan secara nasional. **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**\n\n**Unsur Keanggotaan:** Keanggotaan LKS Tripartit Nasional terdiri dari tiga unsur:\n\n- **Unsur Pemerintah**\n- **Organisasi pengusaha**\n- **Serikat pekerja/serikat buruh**\n\n**(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25)**\n\nSusunan keanggotaannya meliputi:\n\n1. **Ketua** merangkap anggota, dijabat oleh **Menteri**;\n2. **3 (tiga) Wakil Ketua** merangkap anggota, masing-masing mewakili unsur Pemerintah (bidang ketenagakerjaan), organisasi pengusaha, dan serikat pekerja/serikat buruh;\n3. **Sekretaris** merangkap anggota, dijabat oleh unsur Pemerintah bidang ketenagakerjaan;\n4. **Beberapa orang anggota** sesuai kebutuhan.\n\nJumlah seluruh anggota **sebanyak-banyaknya 24 orang**, dengan komposisi keterwakilan **2 : 1 : 1** (pemerintah : pekerja/buruh : pengusaha). **(Sumber: Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 1-25; Regulasi Ketenagakerjaan - PP NO 8 TH 2005, Hal: 26-34)**",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 3640,
+        "totalMs": 6265,
+        "error": null
       }
     },
     "contexts": [
@@ -512,6 +682,56 @@
         "contextChunks": 50,
         "firstTextMs": 8084,
         "totalMs": 11056,
+        "error": null
+      },
+      "lite-think": {
+        "response": "Ketentuan waktu kerja normal, batas waktu lembur, syarat, serta kewajiban pengusaha berdasarkan regulasi tersebut adalah sebagai berikut:\n\n- **Waktu Kerja Normal**:\n  1. 7 (tujuh) jam 1 (satu) hari dan 40 (empat puluh) jam 1 (satu) minggu untuk 6 (enam) hari kerja dalam 1 (satu) minggu; atau\n  2. 8 (delapan) jam 1 (satu) hari dan 40 (empat puluh) jam 1 (satu) minggu untuk 5 (lima) hari kerja dalam 1 (satu) minggu **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n- **Batas Waktu Kerja Lembur**:\n  Waktu kerja lembur hanya dapat dilakukan paling lama **4 (empat) jam dalam 1 (satu) hari** dan **18 (delapan belas) jam dalam 1 (satu) minggu** **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n- **Syarat Mempekerjakan Melebihi Waktu Kerja**:\n  Harus ada **persetujuan pekerja/buruh** yang bersangkutan **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n- **Kewajiban Pengusaha**:\n  Pengusaha yang mempekerjakan pekerja/buruh melebihi waktu kerja wajib **membayar upah kerja lembur** **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash-lite",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 50,
+        "firstTextMs": 7345,
+        "totalMs": 9914,
+        "error": null
+      },
+      "deep": {
+        "response": "Ketentuan waktu kerja normal, batas waktu lembur, serta syarat dan kewajiban pengusaha yang mempekerjakan pekerja melebihi waktu kerja adalah sebagai berikut:\n\n**1. Ketentuan Waktu Kerja Normal**\n- **7 (tujuh) jam** dalam 1 (satu) hari dan **40 (empat puluh) jam** dalam 1 (satu) minggu untuk 6 (enam) hari kerja dalam 1 (satu) minggu; atau\n- **8 (delapan) jam** dalam 1 (satu) hari dan **40 (empat puluh) jam** dalam 1 (satu) minggu untuk 5 (lima) hari kerja dalam 1 (satu) minggu **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n\n**2. Batas Waktu Kerja Lembur**\n- Waktu kerja lembur hanya dapat dilakukan paling lama **4 (empat) jam** dalam 1 (satu) hari dan **18 (delapan belas) jam** dalam 1 (satu) minggu **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n\n**3. Syarat Kerja Lembur**\nPengusaha yang mempekerjakan pekerja/buruh melebihi waktu kerja normal harus memenuhi syarat:\n- Ada **persetujuan pekerja/buruh** yang bersangkutan; dan\n- Waktu kerja lembur hanya dilakukan paling lama **4 (empat) jam dalam 1 (satu) hari dan 18 (delapan belas) jam dalam 1 (satu) minggu** **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n\n**4. Kewajiban Pengusaha**\n- Pengusaha yang mempekerjakan pekerja/buruh melebihi waktu kerja **wajib membayar upah kerja lembur** **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n\n*(Catatan: Ketentuan batas waktu kerja lembur tersebut tidak berlaku bagi sektor usaha atau pekerjaan tertentu)* **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 50,
+        "firstTextMs": 38529,
+        "totalMs": 43088,
+        "error": null
+      },
+      "next-fast": {
+        "response": "Berdasarkan **Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023**, berikut adalah ketentuan mengenai waktu kerja normal, batas waktu lembur, serta syarat dan kewajiban pengusaha:\n\n**1. Ketentuan Waktu Kerja Normal**\nWaktu kerja bagi pekerja/buruh meliputi:\n- **7 (tujuh) jam** dalam 1 (satu) hari dan **40 (empat puluh) jam** dalam 1 (satu) minggu untuk 6 (enam) hari kerja dalam 1 (satu) minggu; atau\n- **8 (delapan) jam** dalam 1 (satu) hari dan **40 (empat puluh) jam** dalam 1 (satu) minggu untuk 5 (lima) hari kerja dalam 1 (satu) minggu **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n\n**2. Batas Waktu Kerja Lembur**\nWaktu kerja lembur hanya dapat dilakukan paling lama **4 (empat) jam** dalam 1 (satu) hari dan **18 (delapan belas) jam** dalam 1 (satu) minggu. Batas ini tidak berlaku bagi sektor usaha atau pekerjaan tertentu **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n\n**3. Syarat Mempekerjakan Pekerja Melebihi Waktu Kerja**\nPengusaha yang mempekerjakan pekerja/buruh melebihi waktu kerja wajib memenuhi syarat berikut:\n- Ada **persetujuan pekerja/buruh** yang bersangkutan; dan\n- Mematuhi batas waktu kerja lembur paling lama **4 (empat) jam dalam 1 (satu) hari dan 18 (delapan belas) jam dalam 1 (satu) minggu** **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.\n\n**4. Kewajiban Pengusaha**\nPengusaha yang mempekerjakan pekerja/buruh melebihi waktu kerja wajib **membayar upah kerja lembur** sesuai dengan ketentuan peraturan perundang-undangan **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 50,
+        "firstTextMs": 3603,
+        "totalMs": 8058,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "**Waktu kerja normal**  \n- 7 jam per hari / 40 jam per minggu untuk 6 hari kerja dalam seminggu, atau  \n- 8 jam per hari / 40 jam per minggu untuk 5 hari kerja dalam seminggu. **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**  \n\n**Batas waktu kerja lembur**  \n- Maksimum **4 jam per hari** dan **18 jam per minggu**. **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**  \n\n**Syarat kerja lembur**  \n1. **Ada persetujuan pekerja/buruh yang bersangkutan**.  \n2. **Lembur tidak boleh melebihi 4 jam per hari dan 18 jam per minggu**. **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**  \n\n**Kewajiban pengusaha**  \n- **Membayar upah kerja lembur** kepada pekerja/buruh yang melakukan lembur. **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**  \n- Ketentuan ini **tidak berlaku bagi sektor usaha atau pekerjaan tertentu** yang diatur oleh peraturan perundang‑undangan lain. **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**  ",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2978,
+        "totalMs": 5387,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "## Ketentuan Waktu Kerja dan Lembur (PERDA No 06 Tahun 2023)\n\n### 1. Waktu Kerja Normal\n\nWaktu kerja normal meliputi:\n\n- **7 (tujuh) jam per hari** dan **40 (empat puluh) jam per minggu** untuk **6 (enam) hari kerja** dalam 1 minggu; **atau**\n- **8 (delapan) jam per hari** dan **40 (empat puluh) jam per minggu** untuk **5 (lima) hari kerja** dalam 1 minggu.\n\nPelaksanaan jam kerja diatur dalam **Perjanjian Kerja, Peraturan Perusahaan, atau Perjanjian Kerja Bersama**. **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**\n\n### 2. Batas Waktu Kerja Lembur\n\nKerja lembur hanya dapat dilakukan paling lama:\n\n- **4 (empat) jam dalam 1 (satu) hari**; dan\n- **18 (delapan belas) jam dalam 1 (satu) minggu**.\n\nKetentuan batas waktu lembur ini **tidak berlaku** bagi sektor usaha atau pekerjaan tertentu sesuai ketentuan peraturan perundang-undangan. **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**\n\n### 3. Syarat dan Kewajiban Pengusaha\n\nPengusaha yang mempekerjakan pekerja/buruh melebihi waktu kerja normal **wajib memenuhi syarat**:\n\n1. **Ada persetujuan** pekerja/buruh yang bersangkutan; dan\n2. Waktu kerja lembur hanya dilakukan paling lama 4 jam/hari dan 18 jam/minggu.\n\nSelain itu, pengusaha **wajib membayar upah kerja lembur** kepada pekerja/buruh yang bekerja melebihi waktu kerja normal. Ketentuan mengenai waktu kerja dan upah kerja lembur dilaksanakan sesuai ketentuan peraturan perundang-undangan. **(Sumber: Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023, Hal: 1-25)**",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 3364,
+        "totalMs": 5871,
         "error": null
       }
     },
@@ -622,6 +842,56 @@
         "firstTextMs": 7911,
         "totalMs": 10469,
         "error": null
+      },
+      "lite-think": {
+        "response": "Berikut adalah pengertian Nomor Induk Kependudukan (NIK), Kartu Keluarga, dan Kartu Tanda Penduduk (KTP) berdasarkan peraturan yang berlaku:\n\n* **Nomor Induk Kependudukan (NIK)** adalah nomor identitas Penduduk yang bersifat unik atau khas, tunggal, dan melekat pada seseorang yang terdaftar sebagai Penduduk Indonesia **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n* **Kartu Keluarga (KK)** adalah kartu identitas keluarga yang memuat data tentang nama, susunan dan hubungan dalam keluarga, serta identitas anggota keluarga **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n* **Kartu Tanda Penduduk (KTP)** adalah identitas resmi Penduduk sebagai bukti diri yang diterbitkan oleh Instansi Pelaksana yang berlaku di seluruh wilayah Negara Kesatuan Republik Indonesia **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash-lite",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 41,
+        "firstTextMs": 5353,
+        "totalMs": 7404,
+        "error": null
+      },
+      "deep": {
+        "response": "Berikut adalah pengertian dari NIK, Kartu Keluarga, dan KTP menurut **PP Nomor 37 Tahun 2007**:\n\n- **Nomor Induk Kependudukan (NIK)** adalah nomor identitas Penduduk yang bersifat unik atau khas, tunggal, dan melekat pada seseorang yang terdaftar sebagai Penduduk Indonesia **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Kartu Keluarga (KK)** adalah kartu identitas keluarga yang memuat data tentang nama, susunan, dan hubungan dalam keluarga, serta identitas anggota keluarga **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Kartu Tanda Penduduk (KTP)** adalah identitas resmi Penduduk sebagai bukti diri yang diterbitkan oleh Instansi Pelaksana yang berlaku di seluruh wilayah Negara Kesatuan Republik Indonesia **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 41,
+        "firstTextMs": 7939,
+        "totalMs": 10572,
+        "error": null
+      },
+      "next-fast": {
+        "response": "Berikut adalah pengertian **NIK**, **Kartu Keluarga (KK)**, dan **Kartu Tanda Penduduk (KTP)** menurut **PP Nomor 37 Tahun 2007**:\n\n- **Nomor Induk Kependudukan (NIK)** adalah nomor identitas Penduduk yang bersifat unik atau khas, tunggal, dan melekat pada seseorang yang terdaftar sebagai Penduduk Indonesia **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Kartu Keluarga (KK)** adalah kartu identitas keluarga yang memuat data tentang nama, susunan, dan hubungan dalam keluarga, serta identitas anggota keluarga **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Kartu Tanda Penduduk (KTP)** adalah identitas resmi Penduduk sebagai bukti diri yang diterbitkan oleh Instansi Pelaksana yang berlaku di seluruh wilayah Negara Kesatuan Republik Indonesia **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 41,
+        "firstTextMs": 10151,
+        "totalMs": 13529,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "**NIK (Nomor Induk Kependudukan)**  \nNomor identitas penduduk yang bersifat unik, tunggal, dan melekat pada setiap orang yang terdaftar sebagai Penduduk Indonesia. NIK diterbitkan oleh Instansi Pelaksana setelah pencatatan biodata penduduk dan berlaku seumur hidup tanpa berubah. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**  \n\n**Kartu Keluarga (KK)**  \nKartu identitas keluarga yang memuat data tentang nama, susunan, hubungan dalam keluarga, serta identitas masing‑masing anggota keluarga. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**  \n\n**Kartu Tanda Penduduk (KTP)**  \nIdentitas resmi penduduk sebagai bukti diri yang diterbitkan oleh Instansi Pelaksana yang berlaku di seluruh wilayah Negara Kesatuan Republik Indonesia. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**  ",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 3304,
+        "totalMs": 5597,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "## Definisi NIK, Kartu Keluarga, dan KTP\n\nMenurut **PP Nomor 37 Tahun 2007**, ketiga istilah tersebut didefinisikan sebagai berikut:\n\n- **Nomor Induk Kependudukan (NIK)** adalah nomor identitas Penduduk yang bersifat **unik atau khas, tunggal, dan melekat** pada seseorang yang terdaftar sebagai Penduduk Indonesia. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**\n\n- **Kartu Keluarga (KK)** adalah kartu identitas keluarga yang memuat data tentang **nama, susunan dan hubungan dalam keluarga, serta identitas anggota keluarga**. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**\n\n- **Kartu Tanda Penduduk (KTP)** adalah identitas resmi Penduduk sebagai **bukti diri** yang diterbitkan oleh Instansi Pelaksana dan berlaku di **seluruh wilayah Negara Kesatuan Republik Indonesia**. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**\n\nSebagai tambahan, NIK terdiri dari **16 digit** yang mencakup kode wilayah (6 digit), tanggal/bulan/tahun lahir (6 digit, dengan penambahan angka 40 untuk perempuan), dan nomor urut penerbitan (4 digit). NIK berlaku **seumur hidup, tidak berubah, dan tidak mengikuti perubahan domisili**. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2969,
+        "totalMs": 5370,
+        "error": null
       }
     },
     "contexts": [
@@ -721,6 +991,56 @@
         "contextChunks": 45,
         "firstTextMs": 36756,
         "totalMs": 39346,
+        "error": null
+      },
+      "lite-think": {
+        "response": "**Data Pribadi** adalah data perseorangan tertentu yang disimpan, dirawat, dan dijaga kebenaran serta dilindungi kerahasiaannya **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nBerdasarkan Peraturan Pemerintah Nomor 37 Tahun 2007, terdapat beberapa larangan bagi pihak yang menggunakan atau mengakses data tersebut:\n\n1. **Larangan bagi Pengguna**: Instansi pemerintah dan swasta sebagai pengguna data pribadi penduduk dilarang menjadikan data pribadi penduduk sebagai bahan informasi publik **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n2. **Larangan bagi Pemegang Hak Akses**: Pemegang hak akses dilarang menjadikan data pribadi penduduk sebagai bahan informasi publik sebelum mendapat persetujuan dari pemberi hak akses **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash-lite",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 45,
+        "firstTextMs": 5843,
+        "totalMs": 8577,
+        "error": null
+      },
+      "deep": {
+        "response": "**Data Pribadi** adalah data perseorangan tertentu yang disimpan, dirawat, dan dijaga kebenaran serta dilindungi kerahasiaannya **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nBerdasarkan PP Nomor 37 Tahun 2007, larangan bagi pengguna serta pemegang hak akses data pribadi penduduk adalah sebagai berikut:\n\n1. **Larangan bagi Pengguna Data Pribadi Penduduk:**\n   - Instansi pemerintah dan swasta selaku pengguna data pribadi penduduk **dilarang menjadikan data pribadi penduduk sebagai bahan informasi publik** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\n2. **Larangan bagi Pemegang Hak Akses Data Pribadi Penduduk:**\n   - Pemegang hak akses **dilarang menjadikan data pribadi penduduk sebagai bahan informasi publik, sebelum mendapat persetujuan dari pemberi hak akses** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 45,
+        "firstTextMs": 11773,
+        "totalMs": 15036,
+        "error": null
+      },
+      "next-fast": {
+        "response": "**Data Pribadi** adalah data perseorangan tertentu yang disimpan, dirawat, dan dijaga kebenaran serta dilindungi kerahasiaannya **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nBerdasarkan PP Nomor 37 Tahun 2007, larangan bagi pengguna dan pemegang hak akses data pribadi penduduk meliputi:\n\n- **Larangan Bagi Pengguna Data Pribadi Penduduk:** Instansi pemerintah maupun swasta selaku pengguna data pribadi penduduk dilarang menjadikan data pribadi penduduk sebagai bahan informasi publik **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Larangan Bagi Pemegang Hak Akses:** Pemegang hak akses data pribadi penduduk dilarang menjadikan data pribadi penduduk sebagai bahan informasi publik sebelum mendapat persetujuan dari pemberi hak akses **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 45,
+        "firstTextMs": 7612,
+        "totalMs": 12133,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "**Data pribadi penduduk** adalah data perseorangan tertentu yang disimpan, dirawat, dan dijaga kebenarannya serta dilindungi kerahasiaannya. Data ini mencakup informasi yang dapat mengidentifikasi individu secara langsung atau tidak langsung dalam konteks administrasi kependudukan. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**  \n\n### Larangan bagi **pengguna data pribadi penduduk**\n- **Tidak boleh menjadikan data pribadi penduduk sebagai bahan informasi publik** tanpa persetujuan dari pemberi hak akses. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25; Pasal 58)**  \n\n### Larangan bagi **pemegang hak akses data pribadi penduduk**\n- **Tidak boleh menjadikan data pribadi penduduk sebagai bahan informasi publik** sebelum mendapat persetujuan dari pemberi hak akses. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25; Pasal 59)**  \n- **Hak akses dapat dicabut** apabila pemegang hak mengungkapkan atau membocorkan data tersebut, atau tidak cakap melaksanakan tugasnya. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25; Pasal 51 (3); Pasal 52)**  \n\n### Pengecualian dalam kepentingan keamanan negara\n- Data pribadi penduduk dapat diakses oleh kepolisian atau peradilan **dengan persetujuan Menteri** bila diperlukan untuk kepentingan keamanan negara. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25; Pasal 60)**  ",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2865,
+        "totalMs": 7965,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "## Definisi Data Pribadi Penduduk\n\n**Data Pribadi** adalah data perseorangan tertentu yang disimpan, dirawat, dan dijaga kebenarannya serta dilindungi kerahasiaannya **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\n## Larangan bagi Pengguna dan Pemegang Hak Akses\n\nPP 37 Tahun 2007 mengatur dua larangan utama:\n\n1. **Bagi pengguna data pribadi penduduk** (instansi pemerintah dan swasta):\n   - **Dilarang** menjadikan data pribadi penduduk sebagai bahan informasi publik **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)** — Pasal 58.\n\n2. **Bagi pemegang hak akses data pribadi penduduk**:\n   - **Dilarang** menjadikan data pribadi penduduk sebagai bahan informasi publik **sebelum mendapat persetujuan dari pemberi hak akses** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)** — Pasal 59.\n\n## Ketentuan Tambahan yang Relevan\n\n- **Hak akses** sebagaimana diatur dalam Pasal 51 (memasukkan, menyimpan, membaca, mengubah, meralat, menghapus, mencetak, dan mengkopi data) **dikecualikan dari data pribadi penduduk**, artinya hak akses tersebut tidak berlaku untuk data pribadi **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)** — Pasal 52.\n\n- Untuk memperoleh data pribadi penduduk, pengguna **wajib memiliki izin** dari Menteri, gubernur, atau bupati/walikota sesuai lingkup data, dan data tersebut **hanya dapat digunakan sesuai keperluan** yang tercantum dalam surat izin **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)** — Pasal 61.\n\n- Hak akses petugas dapat **dicabut** oleh Menteri, antara lain jika petugas **membocorkan data dan dokumen kependudukan** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)** — Pasal 50 ayat (2) huruf e.",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 3446,
+        "totalMs": 6111,
         "error": null
       }
     },
@@ -826,6 +1146,56 @@
         "firstTextMs": 6994,
         "totalMs": 9036,
         "error": null
+      },
+      "lite-think": {
+        "response": "Pejabat Pencatat Sipil pada UPTD Instansi Pelaksana berwenang menerbitkan Kutipan Akta Catatan Sipil yang meliputi sejumlah jenis akta tertentu. \n\nBerdasarkan peraturan yang berlaku, jenis akta catatan sipil tersebut meliputi:\n- Akta **kelahiran** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- Akta **kematian** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- Akta **perkawinan** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- Akta **perceraian** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- Akta **pengakuan anak** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash-lite",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 39,
+        "firstTextMs": 7041,
+        "totalMs": 9139,
+        "error": null
+      },
+      "deep": {
+        "response": "Pejabat Pencatat Sipil pada UPTD Instansi Pelaksana berwenang menerbitkan **Kutipan Akta Catatan Sipil** yang meliputi:\n\n1. **Akta kelahiran**\n2. **Akta kematian**\n3. **Akta perkawinan**\n4. **Akta perceraian**\n5. **Akta pengakuan anak**\n\n**(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 39,
+        "firstTextMs": 6607,
+        "totalMs": 8678,
+        "error": null
+      },
+      "next-fast": {
+        "response": "Pejabat Pencatat Sipil pada **UPTD Instansi Pelaksana** berwenang untuk menerbitkan **Kutipan Akta Catatan Sipil** yang meliputi akta:\n\n1. **Kelahiran**\n2. **Kematian**\n3. **Perkawinan**\n4. **Perceraian**\n5. **Pengakuan anak**\n\n**(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 39,
+        "firstTextMs": 11602,
+        "totalMs": 13828,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "**Pejabat Pencatat Sipil pada UPTD Instansi Pelaksana berwenang menerbitkan Kutipan Akta Catatan Sipil yang meliputi:**\n\n- **Akta Kelahiran**  \n- **Akta Kematian**  \n- **Akta Perkawinan**  \n- **Akta Perceraian**  \n- **Akta Pengakuan Anak**  \n\n**(Sumber: PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2645,
+        "totalMs": 4466,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "Menurut **Pasal 33 PP Nomor 37 Tahun 2007**, **Pejabat Pencatat Sipil pada UPTD Instansi Pelaksana** berwenang menerbitkan **Kutipan Akta Catatan Sipil** yang meliputi:\n\n1. **Kelahiran**\n2. **Kematian**\n3. **Perkawinan**\n4. **Perceraian**\n5. **Pengakuan anak**\n\n**(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**\n\nSebagai konteks, UPTD Instansi Pelaksana sendiri adalah satuan kerja di tingkat kecamatan yang melaksanakan pelayanan Pencatatan Sipil dengan kewenangan menerbitkan akta **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**. Wilayah kerjanya dapat meliputi 1 (satu) kecamatan atau lebih yang secara geografis berdekatan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2836,
+        "totalMs": 5006,
+        "error": null
       }
     },
     "contexts": [
@@ -924,6 +1294,56 @@
         "firstTextMs": 8966,
         "totalMs": 11557,
         "error": null
+      },
+      "lite-think": {
+        "response": "**Hak akses** adalah hak yang diberikan oleh Menteri kepada petugas yang ada pada Penyelenggara dan Instansi Pelaksana untuk dapat mengakses database kependudukan sesuai dengan izin yang diberikan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nTata cara pengusulan pemberian hak akses kepada petugas di daerah diajukan kepada Menteri melalui Direktur Jenderal dengan ketentuan sebagai berikut:\n- Petugas pada **Instansi Pelaksana** dan **penyelenggara kabupaten/kota** diusulkan oleh bupati/walikota melalui gubernur **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- Petugas pada **penyelenggara provinsi** diusulkan oleh gubernur **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash-lite",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 39,
+        "firstTextMs": 5502,
+        "totalMs": 7569,
+        "error": null
+      },
+      "deep": {
+        "response": "**Hak Akses** dalam administrasi kependudukan adalah hak yang diberikan oleh Menteri kepada petugas yang ada pada Penyelenggara dan Instansi Pelaksana untuk dapat mengakses *database* kependudukan sesuai dengan izin yang diberikan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**. \n\nRuang lingkup hak akses tersebut meliputi kegiatan memasukkan, menyimpan, membaca, mengubah, meralat, menghapus, mencetak data, serta mengkopi data dan dokumen kependudukan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nPengusulan pemberian hak akses kepada petugas di daerah dilakukan kepada Menteri melalui Direktur Jenderal dengan mekanisme sebagai berikut:\n1. **Petugas pada Instansi Pelaksana dan Penyelenggara Kabupaten/Kota:** Diusulkan oleh bupati/walikota melalui gubernur **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n2. **Petugas pada Penyelenggara Provinsi:** Diusulkan langsung oleh gubernur **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 39,
+        "firstTextMs": 10963,
+        "totalMs": 14008,
+        "error": null
+      },
+      "next-fast": {
+        "response": "**Hak Akses** adalah hak yang diberikan oleh Menteri kepada petugas pada Penyelenggara dan Instansi Pelaksana untuk dapat mengakses database kependudukan sesuai dengan izin yang diberikan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**. \n\nRuang lingkup hak akses tersebut meliputi kegiatan memasukkan, menyimpan, membaca, mengubah, meralat, menghapus, mencetak data, serta mengkopi data dan dokumen kependudukan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nPemberian hak akses kepada petugas di daerah diusulkan kepada **Menteri melalui Direktur Jenderal** dengan tata cara sebagai berikut:\n1. **Petugas pada Instansi Pelaksana dan Penyelenggara Kabupaten/Kota:** Diusulkan oleh **bupati/walikota** melalui **gubernur** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n2. **Petugas pada Penyelenggara Provinsi:** Diusulkan oleh **gubernur** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 39,
+        "firstTextMs": 10513,
+        "totalMs": 13188,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "**Hak akses** dalam administrasi kependudukan adalah hak yang diberikan oleh Menteri kepada petugas pada penyelenggara atau Instansi Pelaksana untuk dapat mengakses database kependudukan, meliputi memasukkan, menyimpan, membaca, mengubah, meralat, menghapus, mencetak, serta menyalin data dan dokumen kependudukan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\n### Pemberian hak akses kepada petugas di daerah\n1. **Usulan kepada Menteri**  \n   - Petugas pada **Instansi Pelaksana** dan **penyelenggara kabupaten/kota** diusulkan oleh **bupati/walikota** melalui **gubernur**.  \n   - Petugas pada **penyelenggara provinsi** diusulkan oleh **gubernur**.  \n   **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\n2. **Proses pengajuan**  \n   - Usulan tersebut disampaikan kepada **Direktur Jenderal** yang kemudian meneruskan kepada **Menteri** untuk keputusan akhir pemberian hak akses.  \n   **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\n3. **Syarat petugas**  \n   - Petugas harus merupakan **pegawai negeri sipil** yang memenuhi persyaratan pangkat/golongan minimal, memiliki DP3 baik, kompetensi di bidang pranata komputer, serta dedikasi dan tanggung jawab.  \n   **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2810,
+        "totalMs": 5256,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "## Hak Akses dalam Administrasi Kependudukan\n\n**Hak Akses** adalah hak yang diberikan oleh **Menteri** kepada petugas yang ada pada Penyelenggara dan Instansi Pelaksana untuk dapat mengakses database kependudukan sesuai dengan izin yang diberikan. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**\n\nRuang lingkup hak akses tersebut meliputi: memasukkan, menyimpan, membaca, mengubah, meralat, menghapus, mencetak data, serta mengkopi data dan dokumen kependudukan. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**\n\n## Mekanisme Pengusulan Pemberian Hak Akses di Daerah\n\nBerdasarkan **Pasal 53**, pemberian hak akses kepada petugas di daerah diusulkan kepada **Menteri melalui Direktur Jenderal** dengan mekanisme berikut:\n\n1. **Petugas pada Instansi Pelaksana dan penyelenggara kabupaten/kota** → diusulkan oleh **bupati/walikota melalui gubernur**.\n2. **Petugas pada penyelenggara provinsi** → diusulkan oleh **gubernur**.\n\n**(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**\n\n## Syarat Petugas yang Diberi Hak Akses\n\nPetugas yang diusulkan harus memenuhi persyaratan **Pasal 50 ayat (1)**, antara lain:\n\n- **Pangkat/golongan minimum** sesuai jenjang:\n  - Penyelenggara provinsi: paling rendah **Penata Muda (III/a)**\n  - Penyelenggara kabupaten/kota: paling rendah **Pengatur Tingkat I (II/d)**\n  - Instansi Pelaksana: paling rendah **Pengatur (II/c)**\n- Memiliki **DP3** dengan predikat **baik**\n- Memiliki **kompetensi di bidang pranata komputer**\n- Memiliki **dedikasi dan tanggung jawab** terhadap tugasnya\n\n**(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**\n\n> **Catatan:** Hak akses ini **dikecualikan dari data pribadi penduduk** (Pasal 52), dan pencabutannya dilakukan oleh Menteri. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 3958,
+        "totalMs": 6577,
+        "error": null
       }
     },
     "contexts": [
@@ -1021,6 +1441,56 @@
         "contextChunks": 43,
         "firstTextMs": 7483,
         "totalMs": 10314,
+        "error": null
+      },
+      "lite-think": {
+        "response": "Urusan **Administrasi Kependudukan** diselenggarakan oleh **Pemerintah, pemerintah provinsi, dan pemerintah kabupaten/kota** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nDefinisi **SIAK** dan **Data Center** meliputi:\n* **Sistem Informasi Administrasi Kependudukan (SIAK)** adalah sistem informasi yang memanfaatkan teknologi informasi dan komunikasi untuk memfasilitasi pengelolaan informasi Administrasi Kependudukan di tingkat Penyelenggara dan Instansi Pelaksana sebagai satu kesatuan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n* **Data Center** adalah tempat atau ruang penyimpanan perangkat database pada Penyelenggara Pusat yang menghimpun data kependudukan dari penyelenggara provinsi, penyelenggara kabupaten/kota, dan Instansi Pelaksana **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nAlur data dalam penyelenggaraan **hak akses** antar tingkat penyelenggara didasarkan pada ketentuan berikut:\n* Penyelenggara pusat berdasarkan data dari penyelenggara provinsi **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n* Penyelenggara provinsi berdasarkan data dari penyelenggara kabupaten/kota **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n* Penyelenggara kabupaten/kota berdasarkan data dari Instansi Pelaksana **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash-lite",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 43,
+        "firstTextMs": 7695,
+        "totalMs": 10647,
+        "error": null
+      },
+      "deep": {
+        "response": "Urusan Administrasi Kependudukan diselenggarakan oleh **Pemerintah**, **pemerintah provinsi**, dan **pemerintah kabupaten/kota** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nBerikut adalah penjelasan mengenai pengertian SIAK, Data Center, serta alur data penyelenggaraan hak akses:\n\n**1. Pengertian SIAK dan Data Center**\n- **Sistem Informasi Administrasi Kependudukan (SIAK)** adalah sistem informasi yang memanfaatkan teknologi informasi dan komunikasi untuk memfasilitasi pengelolaan informasi Administrasi Kependudukan di tingkat Penyelenggara dan Instansi Pelaksana sebagai satu kesatuan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Data Center** adalah tempat/ruang penyimpanan perangkat database pada Penyelenggara Pusat yang menghimpun data kependudukan dari penyelenggara provinsi, penyelenggara kabupaten/kota, dan Instansi Pelaksana **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\n**2. Alur Data Penyelenggaraan Hak Akses**\nDalam menyelenggarakan hak akses antar tingkat penyelenggara, berlaku ketentuan alur data sebagai berikut:\n- **Penyelenggara pusat** menyelenggarakan hak akses berdasarkan data dari penyelenggara provinsi.\n- **Penyelenggara provinsi** menyelenggarakan hak akses berdasarkan data dari penyelenggara kabupaten/kota.\n- **Penyelenggara kabupaten/kota** menyelenggarakan hak akses berdasarkan data dari Instansi Pelaksana **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.6-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 43,
+        "firstTextMs": 8948,
+        "totalMs": 12176,
+        "error": null
+      },
+      "next-fast": {
+        "response": "Urusan Administrasi Kependudukan diselenggarakan secara berjenjang oleh **Pemerintah**, **pemerintah provinsi**, dan **pemerintah kabupaten/kota** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\nBerikut adalah pengertian SIAK dan Data Center serta alur data penyelenggaraan hak akses berdasarkan aturan tersebut:\n\n**1. Pengertian SIAK dan Data Center**\n- **Sistem Informasi Administrasi Kependudukan (SIAK)** adalah sistem informasi yang memanfaatkan teknologi informasi dan komunikasi untuk memfasilitasi pengelolaan informasi Administrasi Kependudukan di tingkat Penyelenggara dan Instansi Pelaksana sebagai satu kesatuan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Data Center** adalah tempat atau ruang penyimpanan perangkat database pada Penyelenggara Pusat yang menghimpun data kependudukan dari penyelenggara provinsi, penyelenggara kabupaten/kota, dan Instansi Pelaksana **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\n**2. Alur Data Penyelenggaraan Hak Akses**\nDalam menyelenggarakan hak akses antar tingkat penyelenggara, alur data yang berlaku adalah:\n1. **Penyelenggara pusat** menyelenggarakan hak akses berdasarkan data dari penyelenggara provinsi.\n2. **Penyelenggara provinsi** menyelenggarakan hak akses berdasarkan data dari penyelenggara kabupaten/kota.\n3. **Penyelenggara kabupaten/kota** menyelenggarakan hak akses berdasarkan data dari Instansi Pelaksana **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "gemini-3.5-flash",
+        "provider": "gemini",
+        "fallback": false,
+        "contextChunks": 43,
+        "firstTextMs": 8116,
+        "totalMs": 11339,
+        "error": null
+      },
+      "gptoss-fast": {
+        "response": "**Penyelenggara urusan administrasi kependudukan**  \n- Urusan administrasi kependudukan diselenggarakan oleh **Pemerintah, pemerintah provinsi, dan pemerintah kabupaten/kota**. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**  \n\n**Pengertian SIAK**  \n- **Sistem Informasi Administrasi Kependudukan (SIAK)** adalah sistem informasi yang memanfaatkan teknologi informasi dan komunikasi untuk memfasilitasi pengelolaan informasi administrasi kependudukan di tingkat penyelenggara dan instansi pelaksana sebagai satu kesatuan. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**  \n\n**Pengertian Data Center**  \n- **Data Center** adalah tempat/ruang penyimpanan perangkat database pada Penyelenggara Pusat yang menghimpun data kependudukan dari penyelenggara provinsi, penyelenggara kabupaten/kota, dan Instansi Pelaksana. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**  \n\n**Alur data dalam penyelenggaraan hak akses antar tingkat penyelenggara**  \n1. **Penyelenggara Pusat** menerima data dari **penyelenggara provinsi**.  \n2. **Penyelenggara Provinsi** menerima data dari **penyelenggara kabupaten/kota**.  \n3. **Penyelenggara Kabupaten/Kota** menerima data dari **Instansi Pelaksana**.  \n   - Ketentuan ini diatur dalam **Pasal 51 ayat (3)**. **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**  \n\n**Prosedur pemberian hak akses**  \n- Hak akses diberikan kepada petugas pada masing‑masing tingkat penyelenggara melalui usulan kepada Menteri melalui Direktur Jenderal:  \n  - **Instansi Pelaksana & penyelenggara kabupaten/kota** diusulkan oleh **bupati/walikota melalui gubernur**.  \n  - **Penyelenggara provinsi** diusulkan oleh **gubernur**.  \n  **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**  \n\nDengan demikian, struktur penyelenggaraan dimulai dari Instansi Pelaksana (kecamatan) → penyelenggara kabupaten/kota → penyelenggara provinsi → penyelenggara pusat, masing‑masing dikelola melalui SIAK dan data disimpan di Data Center yang terpusat.",
+        "model": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 2649,
+        "totalMs": 5398,
+        "error": null
+      },
+      "qwen-think": {
+        "response": "## Penyelenggara Administrasi Kependudukan\n\nUrusan Administrasi Kependudukan diselenggarakan oleh **Pemerintah, pemerintah provinsi, dan pemerintah kabupaten/kota** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**. Secara rinci:\n\n- **Pemerintah (Menteri)** – menyelenggarakan secara nasional: koordinasi antarinstansi, penetapan sistem/pedoman/standar, pengelolaan data berskala nasional, serta pencetakan dan distribusi blangko Dokumen Kependudukan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Pemerintah Provinsi (Gubernur)** – koordinasi, bimbingan/supervisi, pembinaan, pengelolaan data berskala provinsi, dan koordinasi pengawasan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Pemerintah Kabupaten/Kota (Bupati/Walikota)** – koordinasi, pembentukan Instansi Pelaksana, pengaturan teknis, pelayanan masyarakat, pengelolaan data berskala kabupaten/kota, dan koordinasi pengawasan **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\n## Pengertian SIAK dan Data Center\n\n- **SIAK (Sistem Informasi Administrasi Kependudukan)** adalah sistem informasi yang memanfaatkan teknologi informasi dan komunikasi untuk memfasilitasi pengelolaan informasi Administrasi Kependudukan di tingkat Penyelenggara dan Instansi Pelaksana **sebagai satu kesatuan** **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n- **Data Center** adalah tempat/ruang penyimpanan perangkat database pada **Penyelenggara Pusat** yang menghimpun data kependudukan dari penyelenggara provinsi, penyelenggara kabupaten/kota, dan Instansi Pelaksana **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.\n\n## Alur Data dalam Penyelenggaraan Hak Akses\n\nBerdasarkan **Pasal 51 ayat (3)**, alur data hak akses antar tingkat penyelenggara bersifat **hierarkis dari bawah ke atas**:\n\n1. **Penyelenggara Pusat** → berdasarkan data dari **penyelenggara provinsi**;\n2. **Penyelenggara Provinsi** → berdasarkan data dari **penyelenggara kabupaten/kota**;\n3. **Penyelenggara Kabupaten/Kota** → berdasarkan data dari **Instansi Pelaksana**.\n\n**(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**\n\nSelain itu, hak akses tersebut **dikecualikan dari data pribadi penduduk** (Pasal 52), dan pemberian/pencabutannya dilakukan melalui usulan berjenjang: petugas Instansi Pelaksana dan kabupaten/kota diusulkan oleh bupati/walikota melalui gubernur, sedangkan petugas provinsi diusulkan oleh gubernur kepada Menteri melalui Direktur Jenderal **(Sumber: Regulasi Perdata - PP 37 Tahun 2007, Hal: 1-25)**.",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "groq",
+        "fallback": false,
+        "contextChunks": 20,
+        "firstTextMs": 3267,
+        "totalMs": 6142,
         "error": null
       }
     },

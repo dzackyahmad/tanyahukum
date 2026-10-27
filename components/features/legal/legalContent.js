@@ -17,7 +17,7 @@ const contact = {
   en: CONTACT_EMAIL ? `email at **${CONTACT_EMAIL}**` : "TanyaHukum's official contact email (not yet configured)",
 };
 
-export const EFFECTIVE_DATE = { id: "16 Oktober 2026", en: "October 16, 2026" };
+export const EFFECTIVE_DATE = { id: "27 Oktober 2026", en: "October 27, 2026" };
 
 export const UI = {
   id: {
@@ -559,7 +559,7 @@ const terms = {
               head: ["Paket", "Harga", "Ketentuan utama"],
               rows: [
                 ["Basic", "Gratis", "Jumlah pertanyaan per hari dibatasi sesuai batas yang berlaku pada akun Anda"],
-                ["Pro", "Rp 49.900", "Pertanyaan chatbot tanpa batas harian; aktif setelah pembayaran dikonfirmasi oleh Midtrans"],
+                ["Pro", "Rp 49.900 / 30 hari", "Pertanyaan chatbot tanpa batas harian selama 30 hari sejak pembayaran dikonfirmasi oleh Midtrans; tidak diperpanjang otomatis. Membeli lagi saat masih aktif menambah 30 hari dari tanggal berakhir. Setelah berakhir, akun kembali ke paket Basic"],
               ],
             },
           },
@@ -581,7 +581,7 @@ const terms = {
             list: [
               "Kuota harian dihitung dari setiap pertanyaan yang berhasil dijawab, termasuk jawaban yang Anda hentikan (Stop) setelah AI mulai menulis. **Menghapus riwayat tidak mengembalikan kuota.**",
               "Untuk mencegah penyalahgunaan, berlaku pembatasan jumlah permintaan per menit.",
-              "Model AI disediakan oleh pihak ketiga dan memiliki batas kuotanya sendiri. Jika model pilihan Anda sedang tidak tersedia, sistem dapat otomatis memakai model cadangan; hal ini ditampilkan di panel \"Proses\".",
+              "Model AI disediakan oleh pihak ketiga dan memiliki batas kuotanya sendiri. Jika model pilihan Anda sedang tidak tersedia, sistem dapat otomatis memakai model cadangan; hal ini diberitahukan di atas jawaban dan di panel \"Proses\". Sisa kuota, pemakaian per model, dan masa berlaku paket dapat dilihat di Profil › Penggunaan.",
             ],
           },
         ],
@@ -677,9 +677,9 @@ const terms = {
     ],
     faq: [
       { q: "Apakah jawaban TanyaHukum bisa dijadikan dasar di pengadilan?", a: "Tidak. Jawaban TanyaHukum adalah informasi hukum umum dari AI, bukan nasihat atau pendapat hukum resmi. Untuk perkara, gunakan teks peraturan resmi dan konsultasikan dengan advokat." },
-      { q: "Berapa batas pertanyaan untuk paket gratis?", a: "Paket Basic memiliki batas pertanyaan per hari sesuai batas yang berlaku pada akun Anda. Paket Pro tidak memiliki batas harian. Kuota dihitung per hari dan tidak bertambah dengan menghapus riwayat." },
+      { q: "Berapa batas pertanyaan untuk paket gratis?", a: "Paket Basic memiliki batas pertanyaan per hari sesuai batas yang berlaku pada akun Anda. Paket Pro tidak memiliki batas harian selama masa berlakunya (30 hari). Kuota dihitung per hari dan tidak bertambah dengan menghapus riwayat." },
       { q: "Apa bedanya mode Kilat dan Berpikir?", a: "Mode Kilat langsung menyusun jawaban sehingga lebih cepat. Mode Berpikir membuat AI menimbang dulu sebelum menjawab (prosesnya bisa dilihat di panel \"Proses\"), cocok untuk pertanyaan yang lebih rumit tetapi butuh waktu lebih lama." },
-      { q: "Mengapa jawaban saya dibuat oleh model lain (model cadangan)?", a: "Model AI disediakan pihak ketiga dengan batas kuota tertentu. Jika model pilihan Anda sedang penuh atau kuotanya habis, sistem otomatis memakai model cadangan agar Anda tetap mendapat jawaban. Hal ini selalu ditampilkan di panel \"Proses\"." },
+      { q: "Mengapa jawaban saya dibuat oleh model lain (model cadangan)?", a: "Model AI disediakan pihak ketiga dengan batas kuota tertentu. Jika model pilihan Anda sedang penuh, kuotanya habis, atau terganggu, sistem otomatis memakai model cadangan agar Anda tetap mendapat jawaban tanpa perlu mengirim ulang. Hal ini selalu diberitahukan di atas jawaban." },
       { q: "Bisakah saya meminta pengembalian dana paket Pro?", a: "Jika terjadi kendala, seperti pembayaran berhasil tetapi paket tidak aktif atau tagihan ganda, hubungi kami. Permintaan pengembalian dana ditinjau kasus per kasus sesuai peraturan yang berlaku." },
       { q: "Bolehkah saya memakai jawaban untuk tugas kuliah atau pekerjaan?", a: "Boleh, dengan tetap memeriksa kebenarannya dan merujuk langsung ke peraturan yang dicantumkan sebagai sumber. Anda bertanggung jawab atas penggunaan jawaban tersebut." },
       { q: "Bagaimana jika saya menemukan peraturan yang salah atau sudah tidak berlaku?", a: "Teks peraturan resmi dari pemerintah selalu menjadi acuan utama. Mohon laporkan temuan Anda kepada kami agar database dapat diperbaiki." },
@@ -759,7 +759,7 @@ const terms = {
               head: ["Plan", "Price", "Key terms"],
               rows: [
                 ["Basic", "Free", "The number of questions per day is limited according to the limit applied to your account"],
-                ["Pro", "IDR 49,900", "No daily chatbot question limit; activated once payment is confirmed by Midtrans"],
+                ["Pro", "IDR 49,900 / 30 days", "No daily chatbot question limit for 30 days from the time payment is confirmed by Midtrans; not renewed automatically. Buying again while still active adds 30 days to the end date. When it ends, the account returns to the Basic plan"],
               ],
             },
           },
@@ -781,7 +781,7 @@ const terms = {
             list: [
               "The daily quota counts every successfully answered question, including answers you stop after the AI has started writing. **Deleting your history does not restore your quota.**",
               "To prevent abuse, a per-minute request limit applies.",
-              "AI models are provided by third parties and have their own quota limits. If your selected model is unavailable, the system may automatically use a backup model; this is shown in the \"Process\" panel.",
+              "AI models are provided by third parties and have their own quota limits. If your selected model is unavailable, the system may automatically use a backup model; you are notified above the answer and in the \"Process\" panel. Your remaining quota, usage per model, and plan end date are shown in Profile › Usage.",
             ],
           },
         ],
@@ -877,9 +877,9 @@ const terms = {
     ],
     faq: [
       { q: "Can TanyaHukum's answers be used as a basis in court?", a: "No. TanyaHukum's answers are AI-generated general legal information, not legal advice or an official legal opinion. For legal cases, rely on official regulation texts and consult an advocate." },
-      { q: "What is the question limit for the free plan?", a: "The Basic plan has a daily question limit according to the limit applied to your account. The Pro plan has no daily limit. The quota is counted per day and is not increased by deleting your history." },
+      { q: "What is the question limit for the free plan?", a: "The Basic plan has a daily question limit according to the limit applied to your account. The Pro plan has no daily limit while it is active (30 days). The quota is counted per day and is not increased by deleting your history." },
       { q: "What is the difference between the Kilat (Fast) and Berpikir (Thinking) modes?", a: "Kilat mode composes the answer directly, so it is quicker. Berpikir mode lets the AI reason before answering (the process is visible in the \"Process\" panel). It suits more complex questions but takes longer." },
-      { q: "Why was my answer generated by a different (backup) model?", a: "AI models are provided by third parties with quota limits. If your selected model is busy or out of quota, the system automatically uses a backup model so you still get an answer. This is always shown in the \"Process\" panel." },
+      { q: "Why was my answer generated by a different (backup) model?", a: "AI models are provided by third parties with quota limits. If your selected model is busy, out of quota, or failing, the system automatically uses a backup model so you still get an answer without resending. You are always notified above the answer." },
       { q: "Can I request a refund for the Pro plan?", a: "If something goes wrong, such as a successful payment without plan activation or a double charge, contact us. Refund requests are reviewed case by case in accordance with applicable regulations." },
       { q: "May I use the answers for coursework or work?", a: "Yes, provided you verify their accuracy and refer directly to the regulations cited as sources. You are responsible for how you use the answers." },
       { q: "What if I find a regulation that is wrong or no longer in force?", a: "Official government texts always prevail. Please report your finding to us so the database can be corrected." },

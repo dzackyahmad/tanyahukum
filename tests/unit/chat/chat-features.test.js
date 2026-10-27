@@ -64,7 +64,9 @@ function groqSse(deltas) {
 
 describe('Tombol Stop (pembatalan stream)', () => {
   test('TC-STOP-01: stream dibatalkan klien → AI berhenti & tidak ada riwayat yang disimpan', async () => {
-    mockRag({ geminiChunks: ['Bagian 1. ', 'Bagian 2. ', 'Bagian 3.'], geminiDelayMs: 40 });
+    // Potongan cukup panjang agar lolos penahanan ±96 karakter penjaga output dan langsung terkirim
+    const pad = ' Isi pasal yang menjelaskan hak dan kewajiban pekerja secara rinci.'.repeat(2);
+    mockRag({ geminiChunks: [`Bagian 1.${pad}`, `Bagian 2.${pad}`, `Bagian 3.${pad}`, `Bagian 4.${pad}`], geminiDelayMs: 40 });
     const prismaMock = prismaFor();
     const { POST } = await loadRouteWithMocks(chatRoute, { prismaMock, authSession: SESSION });
 
@@ -81,7 +83,7 @@ describe('Tombol Stop (pembatalan stream)', () => {
     await new Promise((r) => setTimeout(r, 200));
 
     expect(seen).toContain('Bagian 1.');
-    expect(seen).not.toContain('Bagian 3.');
+    expect(seen).not.toContain('Bagian 4.');
     expect(prismaMock.chatHistory.create).not.toHaveBeenCalled();
     expect(prismaMock.chat.create).not.toHaveBeenCalled();
   });
@@ -107,9 +109,12 @@ describe('Mode Groq', () => {
     const events = await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Batas PKWT?', stream: true, mode: 'gptoss' } })));
 
     expect(groqBody.model).toBe('openai/gpt-oss-120b');
-    const systemPrompt = groqBody.messages[0].content;
-    expect(systemPrompt).toContain('PERDA 20 |');      // potongan ke-20 ikut
-    expect(systemPrompt).not.toContain('PERDA 21 |');  // potongan ke-21 tidak (batas Groq)
+    // Dokumen dikirim di pesan pengguna (blok data), bukan di prompt sistem
+    const [systemMsg, userMsg] = groqBody.messages;
+    expect(systemMsg.role).toBe('system');
+    expect(systemMsg.content).not.toContain('PERDA 1 |');
+    expect(userMsg.content).toContain('PERDA 20 |');      // potongan ke-20 ikut
+    expect(userMsg.content).not.toContain('PERDA 21 |');  // potongan ke-21 tidak (batas Groq)
     expect(events.find((e) => e.type === 'model')).toMatchObject({ provider: 'groq', contextChunks: 20, fallback: false });
     expect(events.filter((e) => e.type === 'thinking').map((e) => e.text).join('')).toBe('Menimbang pasal...');
     expect(events.at(-1)).toMatchObject({ type: 'done', model: 'openai/gpt-oss-120b', answer: 'PKWT paling lama 5 tahun.' });
@@ -121,11 +126,13 @@ describe('Mode Groq', () => {
     mockRag({ geminiChunks: ['Jawaban dari Gemini.'] });
     global.fetch = jest.fn(async () => new Response('{"error":"Request too large"}', { status: 413 }));
     const { POST } = await loadRouteWithMocks(chatRoute, { prismaMock: prismaFor(), authSession: SESSION });
+    const { buildModelChain } = await import('@/lib/modelRouter');
+    const backup = buildModelChain('qwen', { env: { GROQ_API_KEY: 'x' } }).find((c) => c.provider === 'gemini'); // cadangan Gemini pertama (urutan Ragas)
     const events = await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true, mode: 'qwen' } })));
 
     const models = events.filter((e) => e.type === 'model').map((e) => [e.provider, e.model, e.fallback]);
     expect(models[0]).toEqual(['groq', 'qwen/qwen3.8-27b', false]);
-    expect(models[1]).toEqual(['gemini', 'gemini-3.6-flash', true]);
+    expect(models.find((m) => m[0] === 'gemini')).toEqual(['gemini', backup.model, true]);
     expect(events.at(-1)).toMatchObject({ type: 'done', answer: 'Jawaban dari Gemini.' });
   });
 
@@ -260,10 +267,13 @@ describe('Fallback saat server model sibuk', () => {
       SystemMessage: class { constructor(c) { this.content = c; } },
     }));
     const { POST } = await loadRouteWithMocks(chatRoute, { prismaMock: prismaFor(), authSession: SESSION });
+    // Dibaca sebelum request: setelah gagal, 3.6 Flash masuk cooldown dan urutannya bergeser
+    const { buildModelChain } = await import('@/lib/modelRouter');
+    const backup = buildModelChain('fast', { env: {} })[1]; // cadangan berikutnya sesuai urutan Ragas
     const events = await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true, mode: 'fast' } })));
     expect(events.filter((e) => e.type === 'model').map((e) => [e.model, e.fallback])).toEqual([
       ['gemini-3.6-flash', false],
-      ['gemini-3.5-flash-lite', true],
+      [backup.model, true],
     ]);
     expect(events.at(-1)).toMatchObject({ type: 'done', answer: 'Jawaban cadangan.' });
   });
@@ -292,11 +302,14 @@ describe('Kuota harian (PromptUsage)', () => {
     const prismaMock = quotaPrisma(0);
     const { POST } = await loadRouteWithMocks(chatRoute, { prismaMock, authSession: SESSION });
     await parseEvents(await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true, mode: 'lite' } })));
-    expect(prismaMock.promptUsage.create).toHaveBeenCalledWith({ data: { userId: 'u1' } });
+    // Pemakaian dicatat beserta model & mode yang benar-benar menjawab (halaman Penggunaan)
+    expect(prismaMock.promptUsage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 'u1', model: expect.any(String), mode: expect.any(String) }) });
   });
 
   test('TC-QUOTA-03: Stop setelah AI menulis → kuota tetap terpakai, riwayat tidak disimpan', async () => {
-    mockRag({ geminiChunks: ['Bagian 1. ', 'Bagian 2. ', 'Bagian 3.'], geminiDelayMs: 40 });
+    // Potongan cukup panjang agar lolos penahanan ±96 karakter penjaga output dan langsung terkirim
+    const pad = ' Isi pasal yang menjelaskan hak dan kewajiban pekerja secara rinci.'.repeat(2);
+    mockRag({ geminiChunks: [`Bagian 1.${pad}`, `Bagian 2.${pad}`, `Bagian 3.${pad}`, `Bagian 4.${pad}`], geminiDelayMs: 40 });
     const prismaMock = quotaPrisma(0);
     const { POST } = await loadRouteWithMocks(chatRoute, { prismaMock, authSession: SESSION });
     const res = await POST(makeMockRequest({ method: 'POST', jsonBody: { message: 'Tes', stream: true, mode: 'fast' } }));

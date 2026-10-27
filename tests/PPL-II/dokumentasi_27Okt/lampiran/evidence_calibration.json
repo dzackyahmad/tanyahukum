@@ -1,0 +1,116 @@
+{
+  "A_ada_di_database": [
+    {
+      "q": "Menurut Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023, berapa lama paling lama PKWT berdasarkan jangka waktu dapat dibuat dan bagaimana ketentuan perpanjangannya?",
+      "top1": 0.732309401,
+      "top5avg": 0.705929029,
+      "title": "Regulasi Ketenagakerjaan - 2023pd3332009"
+    },
+    {
+      "q": "Apa saja kewajiban pengusaha yang mempekerjakan pekerja/buruh perempuan antara pukul 23.00 sampai dengan 07.00 menurut Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023?",
+      "top1": 0.665279448,
+      "top5avg": 0.6441593766,
+      "title": "Regulasi Ketenagakerjaan - 2023pd3332009"
+    },
+    {
+      "q": "Apa saja hak pekerja/buruh perempuan terkait haid, melahirkan, dan menyusui, serta larangan pemutusan hubungan kerja terhadap mereka menurut Peraturan Daerah Kota Salatiga Nomor 9 Tahun 2023?",
+      "top1": 0.702987731,
+      "top5avg": 0.6562050104,
+      "title": "Regulasi Ketenagakerjaan - 2023pd3332009"
+    },
+    {
+      "q": "Apa yang dimaksud dengan NIK, Kartu Keluarga, dan KTP menurut PP Nomor 37 Tahun 2007?",
+      "top1": 0.579565048,
+      "top5avg": 0.5509955646,
+      "title": "Regulasi Perdata - PP 37 Tahun 2007"
+    },
+    {
+      "q": "Apa yang dimaksud dengan data pribadi penduduk dan apa larangan bagi pengguna serta pemegang hak akses data pribadi penduduk menurut PP Nomor 37 Tahun 2007?",
+      "top1": 0.628451347,
+      "top5avg": 0.5719659922,
+      "title": "Regulasi Perdata - PP 37 Tahun 2007"
+    },
+    {
+      "q": "Akta catatan sipil apa saja yang dapat diterbitkan kutipannya oleh Pejabat Pencatat Sipil pada UPTD Instansi Pelaksana menurut PP Nomor 37 Tahun 2007?",
+      "top1": 0.627184927,
+      "top5avg": 0.5819067238,
+      "title": "Regulasi Perdata - PP 37 Tahun 2007"
+    },
+    {
+      "q": "Apa saja hak pekerja yang mengalami PHK sepihak?",
+      "top1": 0.608746529,
+      "top5avg": 0.5497665526000001,
+      "title": "Regulasi Ketenagakerjaan - PERDA No 06 Tahun 2023"
+    },
+    {
+      "q": "Apa saja hak cuti melahirkan menurut UU Ketenagakerjaan?",
+      "top1": 0.604912758,
+      "top5avg": 0.5444887518,
+      "title": "Regulasi Ketenagakerjaan - 2023pd3332009"
+    },
+    {
+      "q": "Berapa lama maksimal PKWT berdasarkan jangka waktu?",
+      "top1": 0.636875212,
+      "top5avg": 0.6112669348,
+      "title": "Regulasi Ketenagakerjaan - 2023pd3332009"
+    }
+  ],
+  "B_hukum_mungkin_tidak_ada": [
+    {
+      "q": "Bagaimana prosedur pendaftaran merek dagang di DJKI?",
+      "top1": 0.565013,
+      "top5avg": 0.5539978642,
+      "title": "Regulasi Ketenagakerjaan - 2.11 Lampiran I.Q sd. I.V PP Nomor 28 Tahun 2025"
+    },
+    {
+      "q": "Apa sanksi pidana pencemaran nama baik menurut UU ITE?",
+      "top1": 0.540794432,
+      "top5avg": 0.5162827134000001,
+      "title": "-"
+    },
+    {
+      "q": "Berapa batas usia minimal menikah di Indonesia?",
+      "top1": 0.628565788,
+      "top5avg": 0.5568279504,
+      "title": "Regulasi Ketenagakerjaan - PERPRES NO 73 TH 2007"
+    },
+    {
+      "q": "Bagaimana tata cara mengajukan grasi kepada Presiden?",
+      "top1": 0.572137892,
+      "top5avg": 0.5665865184000001,
+      "title": "Regulasi Ketenagakerjaan - 1"
+    }
+  ],
+  "C_di_luar_hukum": [
+    {
+      "q": "Bagaimana resep rendang padang yang enak?",
+      "top1": 0.554020882,
+      "top5avg": 0.5194166304000001,
+      "title": "Regulasi Perdata - 2.6a Lampiran I.F PP Nomor 28 Tahun 2025 (I.F.1-700)"
+    },
+    {
+      "q": "Cara membuat website dengan Python dan Flask",
+      "top1": 0.425208092,
+      "top5avg": 0.40229006419999996,
+      "title": "Regulasi Perdata - 2.6f Lampiran I.F PP Nomor 28 Tahun 2025 (I.F.3681-4500)"
+    },
+    {
+      "q": "Siapa juara piala dunia sepak bola 2022?",
+      "top1": 0.501941741,
+      "top5avg": 0.4735929609999999,
+      "title": "Regulasi Ketenagakerjaan - Inpres Nomor 8 Tahun 2020"
+    },
+    {
+      "q": "Rekomendasi film horor terbaru tahun ini",
+      "top1": 0.445736885,
+      "top5avg": 0.4216421306,
+      "title": "Regulasi Perdata - PERDA NO 7 TAHUN 2023 TENTANG RNCANA PERLINDUNGAN DAN PENGELOLAAN LINGKUNGAN HIDUP TAHUN 2023-2053"
+    },
+    {
+      "q": "Tips menurunkan berat badan dengan cepat",
+      "top1": 0.442601234,
+      "top5avg": 0.437587744,
+      "title": "Regulasi Ketenagakerjaan - Inpres Nomor 1 Tahun 2017"
+    }
+  ]
+}

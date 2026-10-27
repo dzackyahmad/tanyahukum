@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { formatResetTime } from "./LimitNotice";
 
 // Pemilih model & mode jawaban di dalam kotak chat.
 // Atas: pilihan model. Bawah: pilihan mode (Kilat / Berpikir).
@@ -14,13 +15,58 @@ const BRAIN = (
   </>
 );
 
+// `model` = id model di server (lib/modelRouter.js), untuk mencocokkan status dari /api/usage.
 export const MODELS = [
-  { key: "flash-lite", label: "Gemini 3.5 Flash-Lite", short: "3.5 Flash-Lite", provider: "Google", description: "Ringan & paling cepat", modes: { fast: "lite", think: "lite-think" } },
-  { key: "flash-36", label: "Gemini 3.6 Flash", short: "3.6 Flash", provider: "Google", description: "Seimbang, jawaban lebih lengkap", modes: { fast: "fast", think: "deep" } },
-  { key: "flash-35", label: "Gemini 3.5 Flash", short: "3.5 Flash", provider: "Google", description: "Model Gemini terbaru", modes: { fast: "next-fast", think: "next" } },
-  { key: "gptoss", label: "GPT-OSS 120B", short: "GPT-OSS", provider: "Groq", description: "Open-source besar, sangat cepat", modes: { fast: "gptoss-fast", think: "gptoss" } },
-  { key: "qwen", label: "Qwen 3.8", short: "Qwen 3.8", provider: "Groq", description: "Open-source, respons tercepat", modes: { fast: "qwen", think: "qwen-think" } },
+  { key: "flash-lite", model: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite", short: "3.5 Flash-Lite", provider: "Google", description: "Ringan & paling cepat", modes: { fast: "lite", think: "lite-think" } },
+  { key: "flash-36", model: "gemini-3.6-flash", label: "Gemini 3.6 Flash", short: "3.6 Flash", provider: "Google", description: "Seimbang, jawaban lebih lengkap", modes: { fast: "fast", think: "deep" } },
+  { key: "flash-35", model: "gemini-3.5-flash", label: "Gemini 3.5 Flash", short: "3.5 Flash", provider: "Google", description: "Model Gemini terbaru", modes: { fast: "next-fast", think: "next" } },
+  { key: "gptoss", model: "openai/gpt-oss-120b", label: "GPT-OSS 120B", short: "GPT-OSS", provider: "Groq", description: "Open-source besar, sangat cepat", modes: { fast: "gptoss-fast", think: "gptoss" } },
+  { key: "qwen", model: "qwen/qwen3.8-27b", label: "Qwen 3.8", short: "Qwen 3.8", provider: "Groq", description: "Open-source, respons tercepat", modes: { fast: "qwen", think: "qwen-think" } },
 ];
+
+// ── Status model (habis / hampir habis) dari /api/usage ─────────────────────
+// Di-cache sebentar agar membuka menu berulang kali tidak terus memanggil API. Gagal / belum
+// login → tanpa status (menu tetap berfungsi seperti biasa).
+const STATUS_TTL_MS = 15_000;
+let statusCache = { at: 0, data: null, pending: null };
+
+function fetchModelStatus() {
+  if (statusCache.data && Date.now() - statusCache.at < STATUS_TTL_MS) return Promise.resolve(statusCache.data);
+  if (!statusCache.pending) {
+    statusCache.pending = fetch("/api/usage", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        const data = json?.availability ? new Map(json.availability.map((a) => [a.model, a])) : null;
+        statusCache = { at: Date.now(), data, pending: null };
+        return data;
+      })
+      .catch(() => {
+        statusCache.pending = null;
+        return null;
+      });
+  }
+  return statusCache.pending;
+}
+
+const LIMIT_TEXT = {
+  limit_daily: "Kuota harian habis",
+  limit: "Batas tercapai",
+  auth: "Akses ditolak penyedia",
+  transient: "Sedang terganggu",
+  timeout: "Sedang terganggu",
+};
+
+// → { tone: "limited" | "near", text } atau null
+function modelStatusInfo(st) {
+  if (!st) return null;
+  if (st.status === "dibatasi") {
+    return { tone: "limited", text: `${LIMIT_TEXT[st.cooldownReason] || "Sementara tidak tersedia"} · tersedia lagi ${formatResetTime(st.cooldownUntil)}` };
+  }
+  if (st.daily?.warning) {
+    return { tone: "near", text: `Hampir habis · ${st.daily.source === "estimasi" ? "±" : ""}${st.daily.percent}% kuota harian terpakai` };
+  }
+  return null;
+}
 
 export const MODES = [
   { key: "fast", label: "Kilat", description: "Langsung menjawab", icon: BOLT },
@@ -65,6 +111,15 @@ export default function ModeToggle({ mode, onChange, disabled = false, openUpwar
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
   const current = describeMode(mode) || describeMode(DEFAULT_MODE);
+  const [status, setStatus] = useState(null);
+
+  // Status diambil saat halaman dibuka (untuk tanda di tombol) dan setiap kali menu dibuka
+  useEffect(() => {
+    let alive = true;
+    fetchModelStatus().then((s) => alive && s && setStatus(s));
+    return () => { alive = false; };
+  }, [open]);
+  const currentInfo = modelStatusInfo(status?.get(current.model.model));
 
   const pickModel = (model) => onChange(model.modes[current.mode.key]);
   const pickMode = (m) => {
@@ -123,6 +178,12 @@ export default function ModeToggle({ mode, onChange, disabled = false, openUpwar
         className="shrink-0 self-center flex items-center gap-1.5 px-2.5 py-1.5 mr-1 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50"
       >
         <Icon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400">{current.mode.icon}</Icon>
+        {currentInfo && (
+          <>
+            <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${currentInfo.tone === "limited" ? "bg-red-500" : "bg-amber-500"}`} />
+            <span className="sr-only">{currentInfo.text}</span>
+          </>
+        )}
         <span className="hidden sm:inline">{current.model.short}</span>
         <span className="hidden sm:inline text-gray-400 dark:text-slate-500 font-medium">· {current.mode.label}</span>
         <Icon className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}>
@@ -143,6 +204,8 @@ export default function ModeToggle({ mode, onChange, disabled = false, openUpwar
           <div role="listbox" aria-label="Model">
             {MODELS.map((m) => {
               const active = m.key === current.model.key;
+              // Model yang habis tetap bisa dipilih: selama batas berlaku, server memakai cadangan
+              const info = modelStatusInfo(status?.get(m.model));
               return (
                 <button
                   key={m.key}
@@ -150,14 +213,24 @@ export default function ModeToggle({ mode, onChange, disabled = false, openUpwar
                   role="option"
                   aria-selected={active}
                   onClick={() => pickModel(m)}
-                  title={m.description}
+                  title={info?.tone === "limited" ? `${m.description}. Tetap bisa dipilih; selama batas berlaku, pertanyaan otomatis dijawab model cadangan.` : m.description}
                   className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-colors ${
                     active ? "bg-blue-50 dark:bg-blue-500/10" : "hover:bg-gray-50 dark:hover:bg-slate-700/50"
                   }`}
                 >
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">{m.label}</span>
-                  <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300">
-                    {m.provider}
+                  <span className={`flex flex-col min-w-0 ${info?.tone === "limited" ? "opacity-60" : ""}`}>
+                    <span className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">{m.label}</span>
+                      <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300">
+                        {m.provider}
+                      </span>
+                    </span>
+                    {info && (
+                      <span className={`flex items-center gap-1.5 mt-0.5 text-[11px] leading-snug ${info.tone === "limited" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                        <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full shrink-0 ${info.tone === "limited" ? "bg-red-500" : "bg-amber-500"}`} />
+                        {info.text}
+                      </span>
+                    )}
                   </span>
                   <span className="ml-auto">{active && <Check />}</span>
                 </button>

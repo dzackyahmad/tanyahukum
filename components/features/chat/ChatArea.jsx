@@ -5,6 +5,9 @@ import Header from "@/components/layout/Header";
 import LegalResponse from "./LegalResponse";
 import AIDisclaimer from "./AIDisclaimer";
 import ProcessPanel from "./ProcessPanel";
+import FallbackNotice from "./FallbackNotice";
+import { ModelLimitNotice, QuotaWarning } from "./LimitNotice";
+import ChatInput from "./ChatInput";
 import ModeToggle, { DEFAULT_MODE, MODE_IDS } from "./ModeToggle";
 
 import {
@@ -103,6 +106,12 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
   const [suggestions, setSuggestions] = useState([]); // diacak tiap obrolan baru
 
   const sendingRef = useRef(false);
+  // Peringatan batas ≥ 70%: kuota pertanyaan pengguna (dari server) & kuota harian model
+  // (cukup sekali per model selama halaman terbuka agar tidak muncul di setiap jawaban)
+  const [quota, setQuota] = useState(null);
+  const [quotaDismissed, setQuotaDismissed] = useState(false);
+  const warnedModelsRef = useRef(new Set());
+  const openUpgrade = () => (onOpenSubscription ? onOpenSubscription() : window.dispatchEvent(new Event("open-subscription")));
 
   // ==============================
   // INIT & SWITCH CONVERSATION
@@ -242,6 +251,12 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
             updateStreamMsg((m) => ({ ...m, process: { ...m.process, sources: { count: event.count, used: event.used, filtered: event.filtered, uniqueCount: event.uniqueCount, docs: event.docs || [] } } }));
           } else if (event.type === "model") {
             updateStreamMsg((m) => ({ ...m, process: { ...m.process, model: event.model, provider: event.provider, contextChunks: event.contextChunks, mode: event.mode || m.process.mode, fallback: !!event.fallback } }));
+          } else if (event.type === "fallback") {
+            // Model berganti otomatis; pengguna tidak perlu mengirim ulang pertanyaan
+            updateStreamMsg((m) => ({ ...m, process: { ...m.process, fallbacks: [...(m.process.fallbacks || []), { from: event.fromLabel, to: event.toLabel, reason: event.reason, restarted: !!event.restarted }] } }));
+          } else if (event.type === "reset") {
+            // Jawaban diulang dari awal (model berganti di tengah jawaban, atau jawaban diblok)
+            updateStreamMsg((m) => ({ ...m, content: "", process: { ...m.process, thinking: "" } }));
           } else if (event.type === "thinking") {
             updateStreamMsg((m) => ({ ...m, process: { ...m.process, thinking: m.process.thinking + event.text } }));
           } else if (event.type === "text") {
@@ -256,14 +271,21 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
         window.dispatchEvent(new Event("refresh-chats"));
       }
 
-      if (user?.tier !== "PRO") {
+      if (data.quota) {
+        setQuota(data.quota);
+        setQuotaDismissed(false);
+      }
+      if (user?.tier !== "PRO" && (data.quota || !data.blocked)) {
         const updatedUser = {
           ...user,
-          promptLimit: Math.max(0, (user.promptLimit || 1) - 1),
+          // Sisa dari server bila ada (lebih akurat), selain itu dikurangi satu seperti sebelumnya
+          promptLimit: data.quota ? data.quota.remaining : Math.max(0, (user.promptLimit || 1) - 1),
         };
         localStorage.setItem("user", JSON.stringify(updatedUser));
         window.dispatchEvent(new Event("auth-change"));
       }
+      const modelWarning = data.modelWarning && !warnedModelsRef.current.has(data.modelWarning.model) ? data.modelWarning : null;
+      if (modelWarning) warnedModelsRef.current.add(modelWarning.model);
 
       // Finalisasi: jawaban lengkap dari server + tandai proses selesai, lalu simpan
       // prosesnya di browser agar tetap bisa dilihat setelah refresh / buka riwayat.
@@ -277,6 +299,7 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
             steps: { search: "done", think: "done", write: "done" },
             done: true,
             durationMs: data.durationMs ?? null,
+            modelWarning,
           },
         };
         saveProcess(data.chatId, finalMsg.content, finalMsg.process);
@@ -348,39 +371,43 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
               {emptyText}
             </p>
 
+            {quota?.warning && !quotaDismissed && (
+              <QuotaWarning quota={quota} onUpgrade={openUpgrade} onClose={() => setQuotaDismissed(true)} className="max-w-2xl" />
+            )}
+
             {/* INPUT TENGAH */}
-            <div data-tour="chat-input" className="w-full max-w-2xl flex border-2 border-blue-100 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm animate-fade-down delay-150 focus-ring premium-glow transition-colors">
-              
-              <input
-                type="text"
+            <div data-tour="chat-input" className="w-full max-w-2xl flex flex-col border-2 border-blue-100 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm animate-fade-down delay-150 focus-ring premium-glow transition-colors">
+
+              {/* Teks memakai seluruh lebar kotak; pilihan model & tombol kirim di baris bawah */}
+              <ChatInput
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={setMessage}
+                onSubmit={handleSend}
+                disabled={loading}
                 placeholder="Ketik Pertanyaan Hukum Anda di sini..."
-                className="flex-1 px-6 py-4 outline-none bg-transparent dark:text-white"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !loading) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
+                className="px-6 pt-4 pb-1"
               />
 
-              <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} />
+              <div className="flex items-center gap-1 px-2 pb-2">
+                {/* spacer, bukan justify-end: di kotak yang sangat sempit tombol meluap ke kanan, tidak tertutup sidebar */}
+                <div className="flex-1" />
+                <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} />
 
-              <button
-                id="send-btn-center"
-                onClick={loading ? stopGeneration : handleSend}
-                title={loading ? "Hentikan jawaban" : "Kirim"}
-                className="px-6 flex items-center justify-center hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all active:scale-95 group/send"
-              >
-                {loading ? <StopIcon /> : <img 
-                  src="/icons/sendChat.svg" 
-                  className="w-6 h-6 transition-all group-hover/send:scale-110" 
-                  style={{ 
-                    filter: "invert(37%) sepia(93%) saturate(1352%) hue-rotate(200deg) brightness(88%) contrast(101%)" 
-                  }}
-                />}
-              </button>
+                <button
+                  id="send-btn-center"
+                  onClick={loading ? stopGeneration : handleSend}
+                  title={loading ? "Hentikan jawaban" : "Kirim"}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all active:scale-95 group/send"
+                >
+                  {loading ? <StopIcon /> : <img
+                    src="/icons/sendChat.svg"
+                    className="w-6 h-6 transition-all group-hover/send:scale-110"
+                    style={{
+                      filter: "invert(37%) sepia(93%) saturate(1352%) hue-rotate(200deg) brightness(88%) contrast(101%)"
+                    }}
+                  />}
+                </button>
+              </div>
 
             </div>
 
@@ -458,6 +485,8 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
                       <div className="flex-1 min-w-0 sm:max-w-[92%]">
                         <div className="px-5 py-4 sm:px-6 sm:py-5 rounded-2xl rounded-tl-md bg-white dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700/60">
                           {msg.process && <ProcessPanel process={msg.process} />}
+                          {msg.process?.fallbacks?.length > 0 && <FallbackNotice fallbacks={msg.process.fallbacks} />}
+                          {msg.process?.modelWarning && <ModelLimitNotice warning={msg.process.modelWarning} />}
                           {msg.content && <LegalResponse content={msg.content} />}
                         </div>
 
@@ -509,38 +538,41 @@ export default function ChatArea({ user, onOpenAuth, onOpenSubscription }) {
             </div>
 
             <div className="px-4 sm:px-6 pt-4 pb-3 border-t border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 transition-colors">
-              <div data-tour="chat-input" className="max-w-5xl mx-auto w-full flex border border-blue-200 dark:border-slate-700 rounded-[1.5rem] overflow-hidden bg-white dark:bg-slate-800 shadow-xl shadow-blue-500/5 focus-ring transition-all">
-                
-                <input
-                  type="text"
+              {quota?.warning && !quotaDismissed && (
+                <QuotaWarning quota={quota} onUpgrade={openUpgrade} onClose={() => setQuotaDismissed(true)} />
+              )}
+              <div data-tour="chat-input" className="max-w-5xl mx-auto w-full flex flex-col border border-blue-200 dark:border-slate-700 rounded-[1.5rem] overflow-hidden bg-white dark:bg-slate-800 shadow-xl shadow-blue-500/5 focus-ring transition-all">
+
+                {/* Teks memakai seluruh lebar kotak; pilihan model & tombol kirim di baris bawah */}
+                <ChatInput
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={setMessage}
+                  onSubmit={handleSend}
+                  disabled={loading}
                   placeholder="Ketik Pertanyaan Hukum Anda di sini..."
-                  className="flex-1 px-6 py-4 outline-none bg-transparent dark:text-white"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !loading) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
+                  className="px-6 pt-4 pb-1"
                 />
 
-                <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} openUpward />
+                <div className="flex items-center gap-1 px-2 pb-2">
+                  {/* spacer, bukan justify-end: di kotak yang sangat sempit tombol meluap ke kanan, tidak tertutup sidebar */}
+                  <div className="flex-1" />
+                  <ModeToggle mode={chatMode} onChange={changeChatMode} disabled={loading} openUpward />
 
-                <button
-                  id="send-btn"
-                  onClick={loading ? stopGeneration : handleSend}
-                  title={loading ? "Hentikan jawaban" : "Kirim"}
-                  className="mr-2 my-2 w-10 h-10 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl transition-all active:scale-95 flex items-center justify-center shrink-0 group/send"
-                >
-                  {loading ? <StopIcon /> : <img 
-                    src="/icons/sendChat.svg" 
-                    className="w-5 h-5 transition-all group-hover/send:translate-x-0.5 group-hover/send:-translate-y-0.5" 
-                    style={{ 
-                      filter: "invert(37%) sepia(93%) saturate(1352%) hue-rotate(200deg) brightness(88%) contrast(101%)" 
-                    }}
-                  />}
-                </button>
+                  <button
+                    id="send-btn"
+                    onClick={loading ? stopGeneration : handleSend}
+                    title={loading ? "Hentikan jawaban" : "Kirim"}
+                    className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl transition-all active:scale-95 flex items-center justify-center shrink-0 group/send"
+                  >
+                    {loading ? <StopIcon /> : <img
+                      src="/icons/sendChat.svg"
+                      className="w-5 h-5 transition-all group-hover/send:translate-x-0.5 group-hover/send:-translate-y-0.5"
+                      style={{
+                        filter: "invert(37%) sepia(93%) saturate(1352%) hue-rotate(200deg) brightness(88%) contrast(101%)"
+                      }}
+                    />}
+                  </button>
+                </div>
 
               </div>
 
