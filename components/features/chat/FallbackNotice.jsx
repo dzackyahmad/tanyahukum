@@ -14,7 +14,7 @@ export default function FallbackNotice({ fallbacks }) {
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
           <span>
-            <strong>{f.from}</strong> {f.reason}. {f.restarted ? "Jawaban diulang otomatis" : "Jawaban dibuat otomatis"} dengan <strong>{f.to}</strong>, tanpa perlu mengirim ulang pertanyaan.
+            <strong>{f.from}</strong> {f.reason}, diganti ke <strong>{f.to}</strong>.{f.restarted ? " Jawaban diulang dari awal." : ""}
           </span>
         </p>
       ))}

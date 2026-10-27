@@ -23,7 +23,7 @@ Tanggal: 27 Oktober 2026 · Status: selesai diuji di lokal, **belum di-deploy**
 
 **Sekarang** (`lib/modelRouter.js`, `app/api/chat/route.js`):
 
-- **Rantai model:** mode pilihan → model lain sesuai urutan Ragas, jenis mode sama (Kilat/Berpikir) didahulukan, satu model sekali. Model Groq dilewati bila `GROQ_API_KEY` kosong.
+- **Rantai model:** mode pilihan → model lain sesuai urutan Ragas, jenis mode sama (Kilat/Berpikir) didahulukan, satu model sekali. Model Groq dilewati bila `GROQ_API_KEY` kosong dan ditandai "Tidak aktif di server" di menu (tidak bisa dipilih).
 - **Klasifikasi error:**
 
   | Jenis | Contoh | Cooldown |
@@ -38,9 +38,9 @@ Tanggal: 27 Oktober 2026 · Status: selesai diuji di lokal, **belum di-deploy**
 
 - **Gagal di tengah jawaban:** server mengirim event `reset` (teks yang sudah tampil dihapus) lalu `fallback`, dan jawaban diulang dari awal dengan model berikutnya. Riwayat & kuota tetap tercatat sekali.
 - **Cooldown:** model yang baru kena limit dipindah ke urutan terakhir (bukan dibuang), sehingga pertanyaan berikutnya langsung ke cadangan tanpa menunggu gagal. Cooldown disimpan di tabel `ModelStatus` dan dibaca **semua instance server** sebelum memilih model (`syncCooldowns`, bersamaan dengan pencarian dokumen, batas 1,5 dtk).
-- **Tanda di menu pilih model** (`ModeToggle.jsx`, data dari `/api/usage`): model habis redup + "Kuota harian habis · tersedia lagi hh.mm" (tetap bisa dipilih, otomatis memakai cadangan); model ≥ 70% "Hampir habis · x% kuota harian terpakai".
+- **Tanda di menu pilih model** (`ModeToggle.jsx`, data dari `/api/usage`): model habis redup + "Kuota harian habis · tersedia lagi hh.mm" dan **tidak bisa dipilih**; bila model yang sedang terpilih habis, pilihan dipindah otomatis ke model terbaik yang tersedia (urutan Ragas, `fallbackOrder` dari `/api/usage`) dengan pemberitahuan di atas kotak pertanyaan; model ≥ 70% "Hampir habis · x% kuota harian terpakai".
 - **Peringatan ≥ 70%** (`LimitNotice.jsx`): event `done` membawa `quota` (kuota pertanyaan pengguna, dari database) dan `modelWarning` (kuota harian model seluruh aplikasi: Groq aktual dari header per hari; Gemini estimasi bila `GEMINI_DAILY_LIMITS` diisi). Kuota pengguna tampil di atas kotak pertanyaan; peringatan model di atas jawaban, sekali per model.
-- **Pemberitahuan:** kotak kuning di atas jawaban (`components/features/chat/FallbackNotice.jsx`), contoh: *"Gemini 3.5 Flash-Lite · Kilat server penyedia sedang sibuk atau terganggu. Jawaban diulang otomatis dengan Gemini 3.6 Flash · Kilat, tanpa perlu mengirim ulang pertanyaan."*
+- **Pemberitahuan:** kotak kuning di atas jawaban (`components/features/chat/FallbackNotice.jsx`), kalimat singkat: *"Gemini 3.5 Flash-Lite · Kilat kena limit, diganti ke Gemini 3.6 Flash · Kilat."* (ditambah *"Jawaban diulang dari awal."* bila jawaban sempat tampil). "Kena limit" hanya untuk error batas dari penyedia; gangguan lain ditulis "sedang gangguan"/"tidak merespons". Bila pesan kuota Google menyebut model lain (mis. `model: gemini-3.6-flash` saat memanggil 3.5 Flash), model itu ikut dijeda.
 - **Semua model gagal:** pesan *"Kuota semua model AI sedang habis atau mencapai batas penggunaan…"*; tidak ada yang disimpan dan kuota tidak terpakai.
 
 ### 2.2 Halaman Penggunaan
@@ -107,7 +107,7 @@ Tidak ada variabel wajib baru.
 
 | Variabel | Wajib | Keterangan |
 |---|---|---|
-| `GROQ_API_KEY` | sudah ada | Tanpa key ini, model Groq dilewati di rantai fallback |
+| `GROQ_API_KEY` | **wajib di Vercel (Production & Preview)** | Tanpa key ini, model Groq dilewati dan ditandai "Tidak aktif di server" di menu |
 | `GEMINI_MODEL` | opsional, sudah ada | ID model "Gemini 3.6 Flash" |
 | `MODEL_PRIORITY` | **opsional, baru** | Ubah urutan fallback tanpa mengubah kode, mis. `qwen,lite,next-fast` (sisanya mengikuti urutan bawaan) |
 | `GEMINI_FALLBACK_MODELS` | **tidak dipakai lagi** | Digantikan urutan Ragas / `MODEL_PRIORITY` |
@@ -135,8 +135,8 @@ Diterapkan dengan `prisma db execute` (database tidak memakai riwayat `prisma mi
 
 | Jenis | Jumlah | Hasil |
 |---|---|---|
-| Unit & integrasi (Jest) | **369** (sebelumnya 232; +137) | 369 lulus |
-| E2E browser (Playwright) | 8 | 8 lulus |
+| Unit & integrasi (Jest) | **372** (sebelumnya 232; +140) | 372 lulus |
+| E2E browser (Playwright) | 9 | 9 lulus (termasuk model habis terkunci & pindah otomatis) |
 
 Test baru:
 

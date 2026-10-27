@@ -140,7 +140,8 @@ function AvailabilitySection({ availability }) {
                 </span>
                 <span className={`text-xs ${limited ? "text-red-600 dark:text-red-400" : near ? "text-amber-600 dark:text-amber-400" : "text-gray-500 dark:text-gray-400"}`}>
                   {limited
-                    ? `${a.cooldownReason === "limit_daily" ? "Kuota harian habis" : "Penuh"}, pulih ${formatResetTime(a.cooldownUntil)}`
+                    ? a.cooldownReason === "not_configured" ? "Tidak aktif di server"
+                      : `${a.cooldownReason === "limit_daily" ? "Kuota harian habis" : "Kena limit"}, pulih ${formatResetTime(a.cooldownUntil)}`
                     : near ? `Hampir habis · ${a.daily.source === "estimasi" ? "±" : ""}${a.daily.percent}% kuota harian`
                       : capacity !== null ? `Kapasitas menit ini ${Math.round(capacity)}%` : "Tersedia"}
                 </span>

@@ -64,3 +64,36 @@ for (const vp of [{ name: 'desktop', width: 1280, height: 720 }, { name: 'HP', w
     await expect(page.getByRole('radio', { name: /Berpikir/ })).toBeInViewport();
   });
 }
+
+test('model yang kuotanya habis tidak bisa dipilih; bila sedang terpilih, pilihan pindah otomatis ke model berikutnya', async ({ page }) => {
+  // Status dari server diganti data contoh: Flash-Lite (model bawaan) kuota hariannya habis
+  const until = new Date(Date.now() + 3 * 3600e3).toISOString();
+  const models = [
+    ['gemini-3.5-flash-lite', 'gemini'], ['gemini-3.6-flash', 'gemini'], ['gemini-3.5-flash', 'gemini'],
+    ['openai/gpt-oss-120b', 'groq'], ['qwen/qwen3.8-27b', 'groq'],
+  ];
+  await page.route('**/api/usage', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      availability: models.map(([model, provider]) => model === 'gemini-3.5-flash-lite'
+        ? { model, provider, status: 'dibatasi', cooldownUntil: until, cooldownReason: 'limit_daily', daily: null }
+        : { model, provider, status: 'tersedia', cooldownUntil: null, cooldownReason: null, daily: null }),
+      fallbackOrder: ['next-fast', 'next', 'fast', 'qwen', 'lite', 'lite-think', 'deep', 'gptoss', 'gptoss-fast', 'qwen-think'],
+    }),
+  }));
+  await page.goto('/chatbot');
+
+  // Pindah otomatis ke model terbaik yang tersedia dengan mode yang sama (Kilat), dan diberi tahu
+  const picker = page.locator('button[aria-haspopup="dialog"]').first();
+  await expect(picker).toHaveAttribute('title', 'Gemini 3.5 Flash · Kilat');
+  await expect(page.getByText('kena limit harian, diganti ke')).toBeVisible();
+
+  // Di menu, Flash-Lite terkunci dan tidak bisa dipilih
+  await picker.click();
+  const lite = page.getByRole('dialog', { name: 'Pilih model dan mode' }).getByRole('option', { name: /Gemini 3\.5 Flash-Lite/ });
+  await expect(lite).toBeDisabled();
+  await expect(lite).toContainText('Kuota harian habis');
+  await lite.click({ force: true });
+  await expect(picker).toHaveAttribute('title', 'Gemini 3.5 Flash · Kilat');
+});

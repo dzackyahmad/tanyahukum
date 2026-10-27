@@ -318,11 +318,16 @@ const cooldownReasonOf = (info) => (info.daily ? "limit_daily" : info.kind);
 // syncCooldowns). Tidak pernah menunda/menggagalkan jawaban.
 function coolDown(c, info) {
   if (!info.cooldownMs) return;
-  markCooldown(c.model, info.cooldownMs, cooldownReasonOf(info));
-  saveModelStatus(prisma, c.model, c.provider, {
-    cooldownUntil: new Date(Date.now() + info.cooldownMs),
-    cooldownReason: cooldownReasonOf(info),
-  }, { force: true });
+  // Model yang disebut di pesan kuota (bila model lain yang kita kenal) ikut dijeda
+  const shared = info.quotaModel && info.quotaModel !== c.model
+    && Object.values(MODE_CONFIG).find((m) => m.model === info.quotaModel);
+  for (const m of shared ? [c, shared] : [c]) {
+    markCooldown(m.model, info.cooldownMs, cooldownReasonOf(info));
+    saveModelStatus(prisma, m.model, m.provider, {
+      cooldownUntil: new Date(Date.now() + info.cooldownMs),
+      cooldownReason: cooldownReasonOf(info),
+    }, { force: true });
+  }
 }
 
 // Kuota pertanyaan pengguna setelah pertanyaan ini tercatat (frontend memberi peringatan ≥ 70%)

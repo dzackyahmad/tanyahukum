@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { rateLimit } from "@/lib/rateLimit";
-import { MODE_CONFIG, modelName, cooldownOf, rateLimitSnapshot, dailyUsageLevel, geminiDailyLimits } from "@/lib/modelRouter";
+import { MODE_CONFIG, modelName, cooldownOf, rateLimitSnapshot, dailyUsageLevel, geminiDailyLimits, modePriority } from "@/lib/modelRouter";
 import { loadModelStatuses, geminiAnswersToday } from "@/lib/modelStatus";
 import {
   effectivePlan, dailyLimitFor, downgradeIfExpired, startOfQuotaDay, nextQuotaReset,
@@ -105,6 +105,10 @@ export async function GET() {
               resetTokens: row.resetTokens, observedAt: rowObserved,
             }
           : null;
+      // Model Groq tanpa GROQ_API_KEY di server ini tidak pernah dipanggil → dikunci di menu
+      if (provider === "groq" && !process.env.GROQ_API_KEY) {
+        return { model, name: modelName(model), provider, status: "dibatasi", cooldownUntil: null, cooldownReason: "not_configured", rateLimit: null, daily: null };
+      }
       return {
         model,
         name: modelName(model),
@@ -139,6 +143,8 @@ export async function GET() {
       models,
       untracked,
       availability,
+      // Urutan Ragas: menu pilih model memakai ini untuk memindahkan pilihan bila model terpilih habis
+      fallbackOrder: modePriority(),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("API Usage Error:", error?.message);

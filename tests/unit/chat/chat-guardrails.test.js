@@ -222,7 +222,7 @@ describe('Fallback model otomatis', () => {
     const fb = events.find((e) => e.type === 'fallback');
     expect(resetAt).toBeGreaterThan(-1);
     expect(fb).toMatchObject({ fromLabel: 'Gemini 3.5 Flash-Lite · Kilat', restarted: true });
-    expect(fb.reason).toMatch(/sibuk|terganggu/);
+    expect(fb.reason).toBe('sedang gangguan');
     expect(events.at(-1)).toMatchObject({ type: 'done', answer: 'Jawaban lengkap dari model cadangan.' });
     expect(events.at(-1).model).not.toBe('gemini-3.5-flash-lite');
     expect(prismaMock.chatHistory.create).toHaveBeenCalledTimes(2); // satu pertanyaan + satu jawaban
@@ -243,7 +243,7 @@ describe('Fallback model otomatis', () => {
 
     expect(events.some((e) => e.type === 'error')).toBe(false);
     const fb = events.find((e) => e.type === 'fallback');
-    expect(fb).toMatchObject({ fromLabel: 'Gemini 3.5 Flash-Lite · Berpikir', reason: 'tidak menghasilkan jawaban', restarted: true });
+    expect(fb).toMatchObject({ fromLabel: 'Gemini 3.5 Flash-Lite · Berpikir', reason: 'tidak memberi jawaban', restarted: true });
     expect(events.findIndex((e) => e.type === 'reset')).toBeGreaterThan(-1); // penalaran yang sempat tampil dihapus
     expect(events.at(-1)).toMatchObject({ type: 'done' });
     expect(events.at(-1).model).not.toBe('gemini-3.5-flash-lite');
@@ -293,7 +293,7 @@ describe('Fallback model otomatis', () => {
     const newCalls = global.__llmCalls.slice(callsBefore).map((c) => c.model);
     expect(newCalls).not.toContain('gemini-3.5-flash-lite'); // langsung ke cadangan, tidak menunggu gagal lagi
     expect(events.find((e) => e.type === 'fallback')).toMatchObject({ fromLabel: 'Gemini 3.5 Flash-Lite · Kilat', restarted: false });
-    expect(events.find((e) => e.type === 'fallback').reason).toMatch(/batas penggunaan/);
+    expect(events.find((e) => e.type === 'fallback').reason).toBe('kena limit');
   });
 
   test('TC-FB-04: Stop pengguna tidak memicu fallback', async () => {
@@ -355,7 +355,7 @@ describe('Batas harian & status model bersama', () => {
 
     expect(global.__llmCalls.map((c) => c.model)).not.toContain('gemini-3.5-flash-lite');
     expect(events.find((e) => e.type === 'fallback')).toMatchObject({
-      fromLabel: 'Gemini 3.5 Flash-Lite · Kilat', reason: 'kuota hariannya sudah habis untuk hari ini', restarted: false,
+      fromLabel: 'Gemini 3.5 Flash-Lite · Kilat', reason: 'kena limit harian', restarted: false,
     });
     expect(events.at(-1)).toMatchObject({ type: 'done' });
   });
@@ -372,7 +372,7 @@ describe('Batas harian & status model bersama', () => {
     const before = Date.now();
     const events = await parseEvents(await ask(POST, 'Apa hak pekerja?'));
 
-    expect(events.find((e) => e.type === 'fallback').reason).toBe('kuota hariannya habis');
+    expect(events.find((e) => e.type === 'fallback').reason).toBe('kena limit harian');
     const saved = prismaMock.modelStatus.upsert.mock.calls.find(([a]) => a.where.model === 'gemini-3.5-flash-lite')[0];
     expect(saved.update.cooldownReason).toBe('limit_daily');
     const expected = before + msUntilPacificMidnight(before);
@@ -426,5 +426,21 @@ describe('Batas harian & status model bersama', () => {
     const { POST } = await loadRouteWithMocks(chatRoute, { prismaMock, authSession: SESSION });
     const events = await parseEvents(await ask(POST, 'Apa hak pekerja?'));
     expect(events.at(-1)).toMatchObject({ type: 'done', model: 'gemini-3.5-flash-lite' });
+  });
+
+  test('TC-LIM-08: pesan kuota Google menyebut model lain (3.5 Flash → "model: gemini-3.6-flash") → kedua model dijeda', async () => {
+    mockServices({
+      behavior: {
+        'gemini-3.5-flash-lite': { failAt: 0, error: { status: 429, message: '[429 Too Many Requests] Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash, description: Generate content requests per day limit exceeded on Free Tier. Please retry in 18h4m48.6s.' } },
+      },
+    });
+    const prismaMock = prismaFor();
+    const { POST } = await loadRouteWithMocks(chatRoute, { prismaMock, authSession: SESSION });
+    const events = await parseEvents(await ask(POST, 'Apa hak pekerja?'));
+
+    const cooled = prismaMock.modelStatus.upsert.mock.calls.filter(([a]) => a.update.cooldownReason === 'limit_daily').map(([a]) => a.where.model);
+    expect(cooled).toEqual(expect.arrayContaining(['gemini-3.5-flash-lite', 'gemini-3.6-flash']));
+    expect(global.__llmCalls.map((c) => c.model)).not.toContain('gemini-3.6-flash');
+    expect(events.at(-1)).toMatchObject({ type: 'done' });
   });
 });

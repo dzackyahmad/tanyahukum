@@ -27,16 +27,19 @@ export const MODELS = [
 // ── Status model (habis / hampir habis) dari /api/usage ─────────────────────
 // Di-cache sebentar agar membuka menu berulang kali tidak terus memanggil API. Gagal / belum
 // login → tanpa status (menu tetap berfungsi seperti biasa).
+// data = { byModel: Map(model → status), order: [id mode sesuai urutan Ragas] }
 const STATUS_TTL_MS = 15_000;
 let statusCache = { at: 0, data: null, pending: null };
 
-function fetchModelStatus() {
-  if (statusCache.data && Date.now() - statusCache.at < STATUS_TTL_MS) return Promise.resolve(statusCache.data);
+function fetchModelStatus({ force = false } = {}) {
+  if (!force && statusCache.data && Date.now() - statusCache.at < STATUS_TTL_MS) return Promise.resolve(statusCache.data);
   if (!statusCache.pending) {
     statusCache.pending = fetch("/api/usage", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
-        const data = json?.availability ? new Map(json.availability.map((a) => [a.model, a])) : null;
+        const data = json?.availability
+          ? { byModel: new Map(json.availability.map((a) => [a.model, a])), order: json.fallbackOrder || [] }
+          : null;
         statusCache = { at: Date.now(), data, pending: null };
         return data;
       })
@@ -50,17 +53,21 @@ function fetchModelStatus() {
 
 const LIMIT_TEXT = {
   limit_daily: "Kuota harian habis",
-  limit: "Batas tercapai",
+  limit: "Kena limit",
   auth: "Akses ditolak penyedia",
-  transient: "Sedang terganggu",
-  timeout: "Sedang terganggu",
+  transient: "Sedang gangguan",
+  timeout: "Sedang gangguan",
+  not_configured: "Tidak aktif di server",
 };
+// Untuk pemberitahuan pindah otomatis: "<model> kena limit, diganti ke <model lain>."
+const SWITCH_REASON = { limit_daily: "kena limit harian", limit: "kena limit", not_configured: "tidak aktif di server" };
 
 // → { tone: "limited" | "near", text } atau null
 function modelStatusInfo(st) {
   if (!st) return null;
   if (st.status === "dibatasi") {
-    return { tone: "limited", text: `${LIMIT_TEXT[st.cooldownReason] || "Sementara tidak tersedia"} · tersedia lagi ${formatResetTime(st.cooldownUntil)}` };
+    const label = LIMIT_TEXT[st.cooldownReason] || "Sementara tidak tersedia";
+    return { tone: "limited", text: st.cooldownUntil ? `${label} · tersedia lagi ${formatResetTime(st.cooldownUntil)}` : label };
   }
   if (st.daily?.warning) {
     return { tone: "near", text: `Hampir habis · ${st.daily.source === "estimasi" ? "±" : ""}${st.daily.percent}% kuota harian terpakai` };
@@ -105,7 +112,9 @@ const Check = () => (
 
 const MENU_WIDTH = 288;
 
-export default function ModeToggle({ mode, onChange, disabled = false, openUpward = false }) {
+// refreshKey: naik setiap kali ada model yang baru gagal/berganti → status diambil ulang tanpa cache.
+// onAutoSwitch({ from, to, reason }): dipanggil saat pilihan dipindah otomatis karena modelnya habis.
+export default function ModeToggle({ mode, onChange, disabled = false, openUpward = false, refreshKey = 0, onAutoSwitch }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const buttonRef = useRef(null);
@@ -113,15 +122,38 @@ export default function ModeToggle({ mode, onChange, disabled = false, openUpwar
   const current = describeMode(mode) || describeMode(DEFAULT_MODE);
   const [status, setStatus] = useState(null);
 
-  // Status diambil saat halaman dibuka (untuk tanda di tombol) dan setiap kali menu dibuka
+  // Status diambil saat halaman dibuka (untuk tanda di tombol), setiap kali menu dibuka, dan
+  // setelah ada fallback (refreshKey)
+  const lastRefreshKey = useRef(refreshKey);
   useEffect(() => {
     let alive = true;
-    fetchModelStatus().then((s) => alive && s && setStatus(s));
+    const force = lastRefreshKey.current !== refreshKey;
+    lastRefreshKey.current = refreshKey;
+    fetchModelStatus({ force }).then((s) => alive && s && setStatus(s));
     return () => { alive = false; };
-  }, [open]);
-  const currentInfo = modelStatusInfo(status?.get(current.model.model));
+  }, [open, refreshKey]);
+  const statusOf = (model) => status?.byModel.get(model.model);
+  const isLimited = (model) => statusOf(model)?.status === "dibatasi";
+  const currentInfo = modelStatusInfo(statusOf(current.model));
 
-  const pickModel = (model) => onChange(model.modes[current.mode.key]);
+  // Model terpilih sedang habis → pindah ke model terbaik yang masih tersedia (urutan Ragas,
+  // jenis mode Kilat/Berpikir sama). Bila semua habis, pilihan dibiarkan (server memberi pesan kuota).
+  useEffect(() => {
+    if (!status || !isLimited(current.model)) return;
+    const candidate = status.order
+      .map((id) => describeMode(id))
+      .find((d) => d && d.mode.key === current.mode.key && !isLimited(d.model));
+    if (!candidate) return;
+    const next = candidate.model.modes[current.mode.key];
+    onChange(next);
+    onAutoSwitch?.({ from: current.model.label, to: modeLabel(next), reason: SWITCH_REASON[statusOf(current.model)?.cooldownReason] || "sedang gangguan" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, mode]);
+
+  const pickModel = (model) => {
+    if (isLimited(model)) return; // model yang habis tidak bisa dipilih
+    onChange(model.modes[current.mode.key]);
+  };
   const pickMode = (m) => {
     onChange(current.model.modes[m.key]);
     setOpen(false);
@@ -204,18 +236,21 @@ export default function ModeToggle({ mode, onChange, disabled = false, openUpwar
           <div role="listbox" aria-label="Model">
             {MODELS.map((m) => {
               const active = m.key === current.model.key;
-              // Model yang habis tetap bisa dipilih: selama batas berlaku, server memakai cadangan
-              const info = modelStatusInfo(status?.get(m.model));
+              // Model yang habis tidak bisa dipilih sampai kuotanya pulih
+              const info = modelStatusInfo(statusOf(m));
+              const locked = info?.tone === "limited";
               return (
                 <button
                   key={m.key}
                   type="button"
                   role="option"
                   aria-selected={active}
+                  aria-disabled={locked}
+                  disabled={locked}
                   onClick={() => pickModel(m)}
-                  title={info?.tone === "limited" ? `${m.description}. Tetap bisa dipilih; selama batas berlaku, pertanyaan otomatis dijawab model cadangan.` : m.description}
+                  title={locked ? `Tidak bisa dipilih: ${info.text}` : m.description}
                   className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-colors ${
-                    active ? "bg-blue-50 dark:bg-blue-500/10" : "hover:bg-gray-50 dark:hover:bg-slate-700/50"
+                    locked ? "cursor-not-allowed" : active ? "bg-blue-50 dark:bg-blue-500/10" : "hover:bg-gray-50 dark:hover:bg-slate-700/50"
                   }`}
                 >
                   <span className={`flex flex-col min-w-0 ${info?.tone === "limited" ? "opacity-60" : ""}`}>
