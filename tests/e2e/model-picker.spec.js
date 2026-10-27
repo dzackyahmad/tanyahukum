@@ -87,7 +87,7 @@ test('model yang kuotanya habis tidak bisa dipilih; bila sedang terpilih, piliha
   // Pindah otomatis ke model terbaik yang tersedia dengan mode yang sama (Kilat), dan diberi tahu
   const picker = page.locator('button[aria-haspopup="dialog"]').first();
   await expect(picker).toHaveAttribute('title', 'Gemini 3.5 Flash · Kilat');
-  await expect(page.getByText('jadi pilihan dipindah otomatis ke')).toBeVisible();
+  await expect(page.getByText('kena limit harian, diganti ke')).toBeVisible();
 
   // Di menu, Flash-Lite terkunci dan tidak bisa dipilih
   await picker.click();

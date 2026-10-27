@@ -178,9 +178,9 @@ try {
       ev({ type: 'model', model: 'gemini-3.5-flash-lite', provider: 'gemini', mode: 'lite', fallback: false, contextChunks: 44 }),
       ev({ type: 'text', text: 'Pekerja yang di-PHK berhak atas uang pes' }),
       ev({ type: 'reset' }),
-      ev({ type: 'fallback', fromLabel: 'Gemini 3.5 Flash-Lite · Kilat', toLabel: 'Gemini 3.5 Flash · Kilat', reason: 'server penyedia sedang sibuk atau terganggu', restarted: true }),
+      ev({ type: 'fallback', fromLabel: 'Gemini 3.5 Flash-Lite · Kilat', toLabel: 'Gemini 3.5 Flash · Kilat', reason: 'sedang gangguan', restarted: true }),
     ],
-  }), { waitFor: 'tanpa perlu mengirim ulang pertanyaan' });
+  }), { waitFor: 'Jawaban diulang dari awal' });
 
   // 6. Pertanyaan spesifik (jawaban asli uji langsung GRD-02)
   const grd02 = liveAnswer('GRD-02');
@@ -313,7 +313,7 @@ try {
   if (want('H19')) {
     const { page, ctx } = await newPage({ usage: usageSwitch });
     await page.goto(`${BASE}/chatbot`);
-    await page.getByText('jadi pilihan dipindah otomatis ke').waitFor({ timeout: 15000 });
+    await page.getByText('kena limit harian, diganti ke').waitFor({ timeout: 15000 });
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${OUT}/H19_pilihan_model_dipindah_otomatis.png` });
     await ctx.close();

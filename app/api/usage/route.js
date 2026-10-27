@@ -105,6 +105,10 @@ export async function GET() {
               resetTokens: row.resetTokens, observedAt: rowObserved,
             }
           : null;
+      // Model Groq tanpa GROQ_API_KEY di server ini tidak pernah dipanggil → dikunci di menu
+      if (provider === "groq" && !process.env.GROQ_API_KEY) {
+        return { model, name: modelName(model), provider, status: "dibatasi", cooldownUntil: null, cooldownReason: "not_configured", rateLimit: null, daily: null };
+      }
       return {
         model,
         name: modelName(model),

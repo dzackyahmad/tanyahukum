@@ -53,17 +53,21 @@ function fetchModelStatus({ force = false } = {}) {
 
 const LIMIT_TEXT = {
   limit_daily: "Kuota harian habis",
-  limit: "Batas tercapai",
+  limit: "Kena limit",
   auth: "Akses ditolak penyedia",
-  transient: "Sedang terganggu",
-  timeout: "Sedang terganggu",
+  transient: "Sedang gangguan",
+  timeout: "Sedang gangguan",
+  not_configured: "Tidak aktif di server",
 };
+// Untuk pemberitahuan pindah otomatis: "<model> kena limit, diganti ke <model lain>."
+const SWITCH_REASON = { limit_daily: "kena limit harian", limit: "kena limit", not_configured: "tidak aktif di server" };
 
 // → { tone: "limited" | "near", text } atau null
 function modelStatusInfo(st) {
   if (!st) return null;
   if (st.status === "dibatasi") {
-    return { tone: "limited", text: `${LIMIT_TEXT[st.cooldownReason] || "Sementara tidak tersedia"} · tersedia lagi ${formatResetTime(st.cooldownUntil)}` };
+    const label = LIMIT_TEXT[st.cooldownReason] || "Sementara tidak tersedia";
+    return { tone: "limited", text: st.cooldownUntil ? `${label} · tersedia lagi ${formatResetTime(st.cooldownUntil)}` : label };
   }
   if (st.daily?.warning) {
     return { tone: "near", text: `Hampir habis · ${st.daily.source === "estimasi" ? "±" : ""}${st.daily.percent}% kuota harian terpakai` };
@@ -142,7 +146,7 @@ export default function ModeToggle({ mode, onChange, disabled = false, openUpwar
     if (!candidate) return;
     const next = candidate.model.modes[current.mode.key];
     onChange(next);
-    onAutoSwitch?.({ from: current.model.label, to: modeLabel(next), reason: modelStatusInfo(statusOf(current.model))?.text });
+    onAutoSwitch?.({ from: current.model.label, to: modeLabel(next), reason: SWITCH_REASON[statusOf(current.model)?.cooldownReason] || "sedang gangguan" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, mode]);
 

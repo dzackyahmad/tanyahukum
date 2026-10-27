@@ -30,8 +30,7 @@ export function ModelLimitNotice({ warning }) {
     >
       <WarnIcon />
       <span>
-        Kuota harian <strong>{warning.name}</strong> sudah {warning.source === "estimasi" ? "±" : ""}{warning.percent}% terpakai
-        {warning.source === "estimasi" ? " (estimasi)" : ""}. Bila habis, pertanyaan berikutnya otomatis dialihkan ke model lain.
+        Kuota harian <strong>{warning.name}</strong> hampir habis ({warning.source === "estimasi" ? "±" : ""}{warning.percent}% terpakai).
       </span>
     </p>
   );
@@ -46,7 +45,7 @@ export function ModelSwitchNotice({ change, onClose, className = "max-w-5xl mx-a
     >
       <WarnIcon />
       <span className="flex-1">
-        <strong>{change.from}</strong> tidak bisa dipakai ({change.reason ? change.reason.charAt(0).toLowerCase() + change.reason.slice(1) : "sedang habis"}), jadi pilihan dipindah otomatis ke <strong>{change.to}</strong>.
+        <strong>{change.from}</strong> {change.reason || "kena limit"}, diganti ke <strong>{change.to}</strong>.
       </span>
       <button type="button" onClick={onClose} aria-label="Tutup pemberitahuan model" className="shrink-0 rounded p-0.5 hover:bg-amber-100 dark:hover:bg-amber-800/40">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">

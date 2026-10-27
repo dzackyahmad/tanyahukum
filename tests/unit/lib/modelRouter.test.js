@@ -130,6 +130,13 @@ describe('lib/modelRouter', () => {
     expect(r.classifyModelError({ status: 429, message: 'per minute. Please retry in 9.1s' }).daily).toBeUndefined();
   });
 
+  test('TC-ROUTE-LIM-04: kuota harian yang disebut untuk model lain dicatat sebagai quotaModel', () => {
+    const msg = '[429 Too Many Requests] * Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash, description: Generate content requests per day limit exceeded on Free Tier.';
+    expect(r.classifyModelError({ status: 429, message: msg }, { provider: 'gemini' }).quotaModel).toBe('gemini-3.6-flash');
+    expect(r.classifyModelError({ status: 429, message: 'quota_id: GenerateRequestsPerDayPerProjectPerModel-FreeTier' }, { provider: 'gemini' }).quotaModel).toBeUndefined();
+    expect(r.FALLBACK_REASON_TEXT.limit).toBe('kena limit');
+  });
+
   test('TC-ROUTE-LIM-03: pemakaian harian — Groq aktual dari header (segar), Gemini estimasi hanya bila batasnya diisi', () => {
     const now = 1_000_000_000;
     expect(r.dailyUsageLevel({ provider: 'groq', snapshot: { limitRequests: 1000, remainingRequests: 280, observedAt: now - 60_000 }, now }))

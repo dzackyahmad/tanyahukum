@@ -59,7 +59,7 @@ Sesi 27 Oktober 2026 mengembangkan lima fitur yang diminta, ditambah empat perub
 
 | Ukuran | Sebelum | Sesudah |
 |---|---|---|
-| Unit & integration test | 232 | **369** (semua lulus) |
+| Unit & integration test | 232 | **372** (semua lulus) |
 | E2E browser | 8 | 9 (semua lulus) |
 | Kombinasi model–mode dievaluasi Ragas | 5 | **10** |
 | Skenario serangan & guardrail diuji langsung | 0 | **14** (semua sesuai setelah tinjauan) |
@@ -117,7 +117,7 @@ Sesi 27 Oktober 2026 mengembangkan lima fitur yang diminta, ditambah empat perub
 | 10. Masukan pengguna | Batas Basic 10, rombak tampilan Penggunaan, bug sidebar & scrollbar | Diterapkan & dicek di browser |
 | 11. Urutan prioritas final | Disusun dari 10 mode; test dibuat membaca urutan dari router, bukan ditulis manual | 354 test lulus |
 | 12. Dokumentasi | Dokumen pengembangan, evaluasi Ragas, dokumen ini + gambar | — |
-| 13. Tambahan: batas harian | Cooldown bersama, jeda kuota harian, tanda di menu model, peringatan 70% (atas pertanyaan & keputusan pengguna) | 369 test & 8 E2E lulus |
+| 13. Tambahan: batas harian | Cooldown bersama, jeda kuota harian, tanda di menu model, peringatan 70% (atas pertanyaan & keputusan pengguna) | 372 test & 9 E2E lulus |
 
 ---
 
@@ -234,7 +234,7 @@ Disimpan di `lib/modelRouter.js` → `DEFAULT_MODE_PRIORITY`, dan bisa diubah ta
 1. Mode pilihan pengguna selalu dicoba pertama.
 2. Lalu mode lain sesuai urutan Ragas (§6.4), **dengan jenis mode yang sama (Kilat/Berpikir) didahulukan**.
 3. Satu model hanya dicoba sekali, karena batas kuota berlaku per model, bukan per mode.
-4. Model Groq dilewati bila `GROQ_API_KEY` tidak diisi.
+4. Model Groq dilewati bila `GROQ_API_KEY` tidak diisi, dan di menu pilih model ditandai **"Tidak aktif di server"** (tidak bisa dipilih).
 
 Contoh untuk default (Flash-Lite · Kilat): Flash-Lite → 3.5 Flash Kilat → 3.6 Flash Kilat → Qwen Kilat → GPT-OSS Kilat.
 
@@ -256,7 +256,9 @@ Contoh untuk default (Flash-Lite · Kilat): Flash-Lite → 3.5 Flash Kilat → 3
 
 **e. Pemberitahuan.** Kotak kuning muncul di **atas jawaban, di luar panel Proses**, sehingga tetap terlihat saat panel tertutup:
 
-> *"Gemini 3.5 Flash-Lite · Kilat server penyedia sedang sibuk atau terganggu. Jawaban diulang otomatis dengan Gemini 3.5 Flash · Kilat, tanpa perlu mengirim ulang pertanyaan."*
+> *"Gemini 3.5 Flash-Lite · Kilat sedang gangguan, diganti ke Gemini 3.5 Flash · Kilat. Jawaban diulang dari awal."*
+
+Kalimatnya sengaja singkat (masukan pengguna 28 Okt: *"bilang aja, ini gabisa dipake kena limit, model diganti ke x"*). Alasannya: `kena limit`, `kena limit harian`, `sedang gangguan`, `tidak merespons`, `tidak memberi jawaban`, `aksesnya ditolak penyedia`, `menolak permintaan`, `tidak aktif di server` (`FALLBACK_REASON_TEXT` di `lib/modelRouter.js`). Kata "kena limit" hanya dipakai bila penyedia memang mengembalikan error batas (429/413); gangguan lain tidak disebut limit.
 
 **f. Semua model gagal.** Muncul pesan *"Kuota semua model AI sedang habis atau mencapai batas penggunaan…"*. Tidak ada yang disimpan dan kuota tidak terpakai.
 
@@ -295,9 +297,9 @@ Ditambahkan setelah pertanyaan pengguna: *"yang notifikasi kena limit dan otomat
 | Bagian | Cara kerja | Berkas |
 |---|---|---|
 | Cooldown bersama | Sebelum memilih model, route chat membaca cooldown aktif dari `ModelStatus` (`syncCooldowns`, berjalan bersamaan dengan pencarian dokumen sehingga tidak menambah waktu tunggu; batas 1,5 dtk, gagal → dilewati) | `lib/modelStatus.js`, `app/api/chat/route.js` |
-| Kuota harian | Error 429 harian Gemini (`…PerDay…`) dijeda **sampai tengah malam Pasifik** walau Gemini menyarankan "retry in 30s". Alasan disimpan sebagai `limit_daily`. Pemberitahuan: *"… kuota hariannya habis"* / *"… kuota hariannya sudah habis untuk hari ini"* | `lib/modelRouter.js` |
+| Kuota harian | Error 429 harian Gemini (`…PerDay…`) dijeda **sampai tengah malam Pasifik** walau Gemini menyarankan "retry in 30s". Alasan disimpan sebagai `limit_daily`. Pemberitahuan: *"… kena limit harian, diganti ke …"*. Bila pesan Google menyebut kuota **model lain** (contoh nyata 27 Okt: permintaan ke `gemini-3.5-flash` ditolak dengan *"limit: 20, model: gemini-3.6-flash"*), model yang disebut itu ikut dijeda (`quotaModel`), sehingga menu tidak menampilkannya seolah masih tersedia | `lib/modelRouter.js`, `app/api/chat/route.js` (`coolDown`) |
 | Tanda di menu model | Menu memanggil `/api/usage` (cache 15 dtk). Model habis: redup + merah *"Kuota harian habis · tersedia lagi besok 00.50"*. Model ≥ 70%: kuning *"Hampir habis · 78% kuota harian terpakai"*. Titik kecil di tombol pemilih bila model terpilih bermasalah. Model habis **dinonaktifkan** (tidak bisa diklik) | `components/features/chat/ModeToggle.jsx` |
-| Pindah otomatis | Bila model yang **sedang terpilih** ternyata habis, pilihan dipindah ke model terbaik yang masih tersedia (urutan Ragas dari `/api/usage` → `fallbackOrder`, jenis mode Kilat/Berpikir sama), lalu muncul *"Gemini 3.5 Flash-Lite tidak bisa dipakai (kuota harian habis · tersedia lagi …), jadi pilihan dipindah otomatis ke Gemini 3.5 Flash · Kilat"* di atas kotak pertanyaan. Bila semua model habis, pilihan dibiarkan dan server memberi pesan kuota. Setelah jawaban yang mengalami fallback, status menu diambil ulang tanpa cache | `ModeToggle.jsx`, `ChatArea.jsx`, `LimitNotice.jsx` (`ModelSwitchNotice`) |
+| Pindah otomatis | Bila model yang **sedang terpilih** ternyata habis, pilihan dipindah ke model terbaik yang masih tersedia (urutan Ragas dari `/api/usage` → `fallbackOrder`, jenis mode Kilat/Berpikir sama), lalu muncul *"Gemini 3.5 Flash-Lite kena limit harian, diganti ke Gemini 3.5 Flash · Kilat."* di atas kotak pertanyaan. Bila semua model habis, pilihan dibiarkan dan server memberi pesan kuota. Setelah jawaban yang mengalami fallback, status menu diambil ulang tanpa cache | `ModeToggle.jsx`, `ChatArea.jsx`, `LimitNotice.jsx` (`ModelSwitchNotice`) |
 | Peringatan kuota pengguna ≥ 70% | Event `done` membawa `quota {used, limit, remaining, warning, resetsAt}` dari database. Basic 10/hari → mulai pertanyaan ke-7 muncul *"Kuota hari ini tinggal 3 dari 10 pertanyaan. Pulih … Upgrade ke Pro"* di atas kotak pertanyaan (bisa ditutup). Angka sisa di header ikut diambil dari server | `lib/subscription.js` (`quotaStatus`), `components/features/chat/LimitNotice.jsx`, `ChatArea.jsx` |
 | Peringatan kuota harian model ≥ 70% | Event `done` membawa `modelWarning` bila model yang menjawab sudah ≥ 70% (seluruh aplikasi). Kotak kuning di atas jawaban, **sekali per model** selama halaman terbuka | `app/api/chat/route.js`, `LimitNotice.jsx` |
 | Halaman Penggunaan | Kuota ≥ 70% → teks *"Tinggal 2 pertanyaan hari ini…"*. Status model: merah *"Kuota harian habis, pulih …"*, kuning *"Hampir habis · 75% kuota harian"* + bar | `app/api/usage/route.js`, `UsagePanel.jsx` |
@@ -323,14 +325,16 @@ Ditambahkan setelah pertanyaan pengguna: *"yang notifikasi kena limit dan otomat
 
 | Test | Skenario | Hasil |
 |---|---|---|
-| TC-LIM-01 | Cooldown `limit_daily` hanya ada di tabel (dari instance lain) | Model itu tidak dipanggil; pemberitahuan "kuota hariannya sudah habis untuk hari ini" |
+| TC-LIM-01 | Cooldown `limit_daily` hanya ada di tabel (dari instance lain) | Model itu tidak dipanggil; pemberitahuan "kena limit harian" |
 | TC-LIM-02 | Gemini 429 harian dengan saran "retry in 30s" | Cooldown tersimpan `limit_daily` sampai tengah malam Pasifik (±5 dtk) |
 | TC-LIM-03 / 04 | Basic 6/10 lalu bertanya; 5/10; PRO | `quota` 7/10 `warning: true`; 6/10 `warning: false`; PRO `null` |
 | TC-LIM-05 / 06 | `GEMINI_DAILY_LIMITS` diisi (8 dari 10) / tidak diisi | `modelWarning` 80% estimasi, dihitung untuk semua pengguna / tidak ada peringatan & tidak ada query |
 | TC-LIM-07 | Tabel status gagal dibaca | Chat tetap dijawab normal |
-| TC-ROUTE-LIM-01..03 | Waktu tengah malam Pasifik, format waktu Groq (7m12.5s, 500ms, 1h2m3s), data Groq kedaluwarsa, ambang tepat 70% | Lulus |
+| TC-LIM-08 | Pesan 429 harian menyebut model lain (`model: gemini-3.6-flash`) | Model yang gagal **dan** model yang disebut sama-sama dijeda `limit_daily`; 3.6 Flash tidak dipanggil |
+| TC-ROUTE-LIM-01..04 | `quotaModel` dari pesan Google; waktu tengah malam Pasifik, format waktu Groq (7m12.5s, 500ms, 1h2m3s), data Groq kedaluwarsa, ambang tepat 70% | Lulus |
 | TC-MSTAT-01..03 | Salin cooldown + alasan; DB lambat (timeout) / error; jendela hitung Gemini | Lulus |
 | TC-SUB-QUOTA-01, TC-USAGE-09 | Ambang kuota pengguna; API Penggunaan memuat alasan & pemakaian harian | Lulus |
+| TC-USAGE-10 | `GROQ_API_KEY` tidak diset di server | Model Groq `dibatasi` dengan alasan `not_configured` (tanpa waktu pulih); model Gemini tetap tersedia |
 | Database asli (hanya baca) | Query cooldown aktif & hitung jawaban Gemini 24 jam | Berjalan (222 ms) |
 | E2E `model-picker.spec.js` (baru) | Status contoh: Flash-Lite (model bawaan) kuota hariannya habis | Pilihan pindah ke Gemini 3.5 Flash · Kilat + pemberitahuan; opsi Flash-Lite `disabled` & berlabel "Kuota harian habis"; diklik paksa pun pilihan tidak berubah |
 | Browser | Menu, chat, Penggunaan (H15–H19); E2E pemilih model lama tetap lulus | Sesuai |
@@ -611,7 +615,7 @@ Daftar ID 51 akun yang diubah disimpan sebelum migrasi, sehingga bisa dikembalik
 
 | Jenis | Alat | Jumlah | Hasil |
 |---|---|---|---|
-| Unit & integration | Jest + mock Prisma & layanan luar | **369** (sebelumnya 232) | 369 lulus |
+| Unit & integration | Jest + mock Prisma & layanan luar | **372** (sebelumnya 232) | 372 lulus |
 | E2E browser | Playwright | 9 | 9 lulus |
 | Uji langsung keamanan & guardrail | Skrip ke server lokal, model sungguhan | 14 skenario | 14 sesuai (1 dinilai manual) |
 | Kalibrasi ambang dokumen | Voyage + Pinecone | 18 pertanyaan | Ambang ditetapkan |
@@ -708,9 +712,9 @@ Cek: buka Profil › Penggunaan, angka "Pertanyaan hari ini" **tidak bertambah**
 
 | Cara | Yang diharapkan |
 |---|---|
-| Pilih **Gemini 3.6 Flash** atau **3.5 Flash** saat kuota hariannya habis (kuota harian gratis kecil; habis selama evaluasi 27 Okt, pulih ±14.00 WIB), lalu bertanya | Kotak kuning: "… mencapai batas penggunaan… Jawaban dibuat otomatis dengan …" dan jawaban tetap keluar |
-| Bertanya lagi dengan model yang sama | Kotak kuning "baru saja mencapai batas penggunaan" muncul langsung, tanpa menunggu |
-| Profil › Penggunaan › Status model | Model tersebut berstatus **Penuh, pulih hh.mm** (kuota harian: **Kuota harian habis, pulih …**) |
+| Pilih **Gemini 3.6 Flash** atau **3.5 Flash** saat kuota hariannya habis (kuota harian gratis kecil; habis selama evaluasi 27 Okt, pulih ±14.00 WIB), lalu bertanya | Kotak kuning: "… kena limit harian, diganti ke …" dan jawaban tetap keluar |
+| Buka lagi halaman chat | Model itu sudah tidak bisa dipilih; bila sedang terpilih, pilihan pindah otomatis dengan kotak kuning "… kena limit harian, diganti ke …" |
+| Profil › Penggunaan › Status model | Model tersebut berstatus **Kena limit, pulih hh.mm** (kuota harian: **Kuota harian habis, pulih …**) |
 | Buka menu pilih model setelah itu | Model tersebut redup dengan tulisan merah "… · tersedia lagi hh.mm" dan **tidak bisa diklik**; bila model itu yang sedang terpilih, pilihan sudah dipindah otomatis dengan pemberitahuan di atas kotak pertanyaan |
 | Akun **Basic**: ajukan 7 pertanyaan dalam sehari | Mulai jawaban ke-7 muncul kotak kuning di atas kotak pertanyaan: "Kuota hari ini tinggal 3 dari 10 pertanyaan…" |
 | Lokal: isi `GEMINI_DAILY_LIMITS=gemini-3.5-flash-lite=3` di `.env.local`, restart, ajukan 3 pertanyaan dengan Flash-Lite | Mulai jawaban ke-3 (≥ 70% dari 3) muncul "Kuota harian Gemini 3.5 Flash-Lite sudah ±100% terpakai (estimasi)…" sekali; menu model menandai "Hampir habis". **Hapus env setelahnya** |
@@ -733,13 +737,13 @@ Cek: buka Profil › Penggunaan, angka "Pertanyaan hari ini" **tidak bertambah**
 
 | Variabel | Wajib | Keterangan |
 |---|---|---|
-| `GROQ_API_KEY` | sudah ada | Tanpa key ini, model Groq dilewati di rantai fallback |
+| `GROQ_API_KEY` | **wajib di Vercel (Production & Preview)** | Tanpa key ini, model Groq (GPT-OSS, Qwen) dilewati dan ditandai "Tidak aktif di server" di menu. Temuan 28 Okt: di deployment yang belum diisi, Qwen selalu dialihkan ke Gemini |
 | `GEMINI_MODEL` | opsional, sudah ada | ID model "Gemini 3.6 Flash" |
 | `MODEL_PRIORITY` | opsional, **baru** | Ubah urutan cadangan tanpa mengubah kode, mis. `qwen,lite,next-fast` (sisanya mengikuti urutan bawaan) |
 | `GEMINI_FALLBACK_MODELS` | **tidak dipakai lagi** | Digantikan urutan Ragas / `MODEL_PRIORITY` |
 | `GEMINI_DAILY_LIMITS` | opsional, **baru** | Batas request harian per model Gemini untuk **estimasi** peringatan 70%, mis. `gemini-3.6-flash=20,gemini-3.5-flash=20`. Isi sesuai batas di Google AI Studio (Rate limits). Kosong → tanpa persentase Gemini |
 
-Tidak ada variabel wajib baru di Vercel.
+Tidak ada variabel wajib **baru** di Vercel. Yang wajib dicek hanya `GROQ_API_KEY` (variabel lama) sudah ada di Production **dan** Preview. Variabel opsional boleh dikosongkan: tanpa `MODEL_PRIORITY` dipakai urutan Ragas, tanpa `GEMINI_DAILY_LIMITS` persentase Gemini tidak ditampilkan (tanda "habis" tetap muncul), tanpa `GEMINI_MODEL` dipakai `gemini-3.6-flash`.
 
 ### 17.2 Langkah deploy
 

@@ -27,6 +27,9 @@ async function callUsage(prismaMock, session = { userId: 'user-1' }) {
 }
 
 describe('GET /api/usage', () => {
+  beforeEach(() => { process.env.GROQ_API_KEY = 'test-groq-key'; });
+  afterEach(() => { delete process.env.GROQ_API_KEY; });
+
   test('TC-USAGE-01: tanpa login → 401', async () => {
     const { status } = await callUsage(makePrisma(), null);
     expect(status).toBe(401);
@@ -139,5 +142,14 @@ describe('GET /api/usage', () => {
     } finally {
       delete process.env.GEMINI_DAILY_LIMITS;
     }
+  });
+
+  test('TC-USAGE-10: GROQ_API_KEY tidak diset di server → model Groq dikunci "tidak aktif" (tanpa waktu pulih)', async () => {
+    delete process.env.GROQ_API_KEY;
+    const { body } = await callUsage(makePrisma({ user: { id: 'user-1', tier: 'FREE', promptLimit: 10, proExpiresAt: null } }));
+    const byModel = Object.fromEntries(body.availability.map((a) => [a.model, a]));
+    expect(byModel['qwen/qwen3.8-27b']).toMatchObject({ status: 'dibatasi', cooldownReason: 'not_configured', cooldownUntil: null });
+    expect(byModel['openai/gpt-oss-120b'].status).toBe('dibatasi');
+    expect(byModel['gemini-3.6-flash'].status).toBe('tersedia');
   });
 });
