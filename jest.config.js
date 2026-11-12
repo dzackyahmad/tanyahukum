@@ -39,5 +39,15 @@ const customJestConfig = {
   ],
 };
 
-module.exports = createJestConfig(customJestConfig);
+// next/jest hanya mengizinkan *menambah* transformIgnorePatterns, sehingga polanya sendiri
+// (abaikan semua node_modules) tetap mengabaikan jose. jose versi 6 berformat ESM murni dan
+// harus ditranspilasi agar bisa di-require Jest; tanpa ini test hanya lulus bila cache Jest
+// kebetulan masih menyimpan hasil transform lama.
+module.exports = async () => {
+  const config = await createJestConfig(customJestConfig)();
+  config.transformIgnorePatterns = config.transformIgnorePatterns.map((pattern) =>
+    pattern.replace('(?!(', '(?!(jose|'),
+  );
+  return config;
+};
 
